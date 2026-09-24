@@ -47,9 +47,37 @@
   // ---------- Drawing ----------
   function fit(text, max) {
     if (ctx.measureText(text).width <= max) return text;
-    let t = text;
+    let t = text.replace(/…$/, '');
     while (t.length > 1 && ctx.measureText(t + '…').width > max) t = t.slice(0, -1);
     return t + '…';
+  }
+
+  const MAX_CHARS = 26;
+
+  // Ellipsize after 26 chars, then wrap by words (hyphen-breaking any word too wide),
+  // and ellipsize the last line if it still needs more lines than the slice allows.
+  function wrapLabel(text, maxW, maxLines) {
+    let t = text.trim().replace(/\s+/g, ' ');
+    if (t.length > MAX_CHARS) t = t.slice(0, MAX_CHARS).trimEnd() + '…';
+    const lines = [];
+    let cur = '';
+    for (let w of t.split(' ')) {
+      while (ctx.measureText(w).width > maxW && w.length > 1) {
+        if (cur) { lines.push(cur); cur = ''; }
+        let k = w.length - 1;
+        while (k > 1 && ctx.measureText(w.slice(0, k) + '-').width > maxW) k--;
+        lines.push(w.slice(0, k) + '-');
+        w = w.slice(k);
+      }
+      const test = cur ? cur + ' ' + w : w;
+      if (ctx.measureText(test).width <= maxW) cur = test;
+      else { if (cur) lines.push(cur); cur = w; }
+    }
+    if (cur) lines.push(cur);
+    if (lines.length <= maxLines) return lines;
+    const kept = lines.slice(0, maxLines);
+    kept[maxLines - 1] = fit(kept[maxLines - 1].replace(/[-…]$/, '') + '…', maxW);
+    return kept;
   }
 
   function draw() {
@@ -79,6 +107,8 @@
     const a = Math.PI * 2 / n;
     const rot = rotation * Math.PI / 180;
     const fs = Math.max(11, Math.min(size * 0.042, a * R * 0.42, 24));
+    const lh = fs * 1.15;
+    const maxLines = Math.max(1, Math.min(3, Math.floor((a * R * 0.6) / lh)));
     ctx.font = `700 ${fs}px "Schibsted Grotesk", system-ui, sans-serif`;
 
     for (let i = 0; i < n; i++) {
@@ -92,7 +122,8 @@
       ctx.translate(c, c); ctx.rotate(start + a / 2);
       ctx.fillStyle = textOn(items[i].color);
       ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-      ctx.fillText(fit(items[i].label, R * 0.6), R - fs * 1.1, 0);
+      const lines = wrapLabel(items[i].label, R * 0.6, maxLines);
+      lines.forEach((ln, j) => ctx.fillText(ln, R - fs * 1.1, (j - (lines.length - 1) / 2) * lh));
       ctx.restore();
     }
     ctx.globalAlpha = 1;
@@ -191,12 +222,12 @@
       const dot = document.createElement('input');
       dot.type = 'color'; dot.className = 'dot-input'; dot.value = item.color;
       dot.setAttribute('aria-label', `Color for ${item.label || 'entry'}`);
-      dot.addEventListener('input', () => { item.color = dot.value; save(); draw(); });
+      dot.addEventListener('input', () => { item.color = dot.value; save(); resetWheel(); });
 
       const txt = document.createElement('input');
       txt.type = 'text'; txt.value = item.label; txt.maxLength = 60;
       txt.setAttribute('aria-label', `Entry ${i + 1}`);
-      txt.addEventListener('input', () => { item.label = txt.value; save(); draw(); });
+      txt.addEventListener('input', () => { item.label = txt.value; save(); resetWheel(); });
       txt.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('newItem').focus(); } });
       txt.addEventListener('blur', () => {
         if (!txt.value.trim() && items.includes(item)) { items.splice(items.indexOf(item), 1); commit(); }
@@ -219,7 +250,7 @@
 
     const add = document.createElement('li');
     add.className = 'add';
-    add.innerHTML = '<span class="plus" aria-hidden="true">+</span><input type="text" id="newItem" placeholder="Add entry" maxlength="60" aria-label="Add entry" autocomplete="off">';
+    add.innerHTML = '<svg class="plus" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.6 2.4"/><path d="M9 5.5v7M5.5 9h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input type="text" id="newItem" placeholder="Add entry" maxlength="60" aria-label="Add entry" autocomplete="off">';
     listEl.append(add);
     add.querySelector('input').addEventListener('keydown', e => {
       if (e.key !== 'Enter') return;
@@ -236,9 +267,17 @@
     });
   }
 
+  // Back to the start position: pointer centred on the first entry, no highlight
+  function resetWheel() {
+    rotation = items.length ? -(360 / items.length) / 2 : 0;
+    winner = -1;
+    result.classList.remove('show');
+    lastIndex = indexAtPointer();
+    draw();
+  }
+
   function commit() {
-    winner = -1; result.classList.remove('show');
-    save(); renderList(); lastIndex = indexAtPointer(); draw();
+    save(); renderList(); resetWheel();
   }
 
   $('clearAll').addEventListener('click', () => {
@@ -262,7 +301,7 @@
   load();
   spinTime.value = seconds; syncRange();
   renderList();
-  lastIndex = indexAtPointer();
+  resetWheel();
   new ResizeObserver(draw).observe(wrap);
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
   if (mq.addEventListener) mq.addEventListener('change', draw);
