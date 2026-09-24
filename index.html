@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spin the Wheel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <main class="stage">
+    <div class="wheel-wrap" id="wrap">
+      <svg class="pointer" id="pointer" viewBox="0 0 34 44" aria-hidden="true">
+        <path d="M17 42 C12 30 3 24 3 14 A14 14 0 0 1 31 14 C31 24 22 30 17 42 Z" fill="var(--ink)"/>
+        <circle cx="17" cy="14" r="5" fill="var(--surface)"/>
+      </svg>
+      <canvas id="wheel" aria-hidden="true"></canvas>
+      <button class="hub" id="spinBtn" type="button">Spin</button>
+    </div>
+    <div class="result" id="result" role="status" aria-live="polite">
+      <span class="dot" id="resDot"></span>
+      <span class="name" id="resName"></span>
+      <button type="button" id="resRemove">Remove</button>
+      <button type="button" id="resClose" aria-label="Dismiss">Done</button>
+    </div>
+  </main>
+
+  <aside class="side">
+    <fieldset id="controls">
+      <header>
+        <h1>Entries</h1>
+        <span class="count" id="count"></span>
+      </header>
+
+      <ul class="list" id="list"></ul>
+
+      <div class="foot">
+        <div class="dur">
+          <div class="dur-top"><label for="spinTime">Spin time</label><output id="spinTimeOut" for="spinTime"></output></div>
+          <input type="range" id="spinTime" min="1" max="20" step="1">
+        </div>
+        <div class="tools">
+          <button class="tool" type="button" id="recolor">Reset colors</button>
+          <button class="tool danger" type="button" id="clearAll">Clear all</button>
+        </div>
+      </div>
+    </fieldset>
+  </aside>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
