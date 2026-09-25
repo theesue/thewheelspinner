@@ -40,7 +40,7 @@
         return;
       }
     } catch (e) {}
-    items = ['Alex', 'Jordan', 'Sam', 'Taylor', 'Morgan', 'Riley'].map((label, i) => ({ label, color: autoColor(i) }));
+    items = [];
   }
   function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify({ items, seconds })); } catch (e) {} }
 
