@@ -111,7 +111,7 @@
       ctx.beginPath(); ctx.arc(c, c, R - 10, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
       ctx.fillStyle = cssVar('--soft'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = `500 ${Math.max(14, size * 0.032)}px "Schibsted Grotesk", system-ui, sans-serif`;
-      ctx.fillText('Add entries to fill the wheel', c, c + size * 0.18);
+      ctx.fillText('Add items to fill the wheel', c, c + size * 0.18);
       return;
     }
 
@@ -167,7 +167,7 @@
   }
 
   function spin() {
-    flushPending();          // an entry waiting to be auto-removed goes before the next spin
+    flushPending();          // an item waiting to be auto-removed goes before the next spin
     if (!items.length) return;
     const now = performance.now();
     const s = state(now);
@@ -217,7 +217,7 @@
     }
   }
 
-  // Remove the entry that's waiting on the auto-remove timer, if any
+  // Remove the item that's waiting on the auto-remove timer, if any
   function flushPending() {
     if (!pending) return;
     const { item, timer } = pending;
@@ -247,7 +247,7 @@
 
   function renderList() {
     listEl.innerHTML = '';
-    countEl.textContent = items.length === 1 ? '1 entry' : `${items.length} entries`;
+    countEl.textContent = items.length === 1 ? '1 item' : `${items.length} items`;
     spinBtn.disabled = !items.length;
 
     items.forEach((item, i) => {
@@ -256,12 +256,12 @@
 
       const dot = document.createElement('input');
       dot.type = 'color'; dot.className = 'dot-input'; dot.value = item.color;
-      dot.setAttribute('aria-label', `Color for ${item.label || 'entry'}`);
+      dot.setAttribute('aria-label', `Color for ${item.label || 'item'}`);
       dot.addEventListener('input', () => { item.color = dot.value; save(); resetWheel(); });
 
       const txt = document.createElement('input');
       txt.type = 'text'; txt.value = item.label; txt.maxLength = 60;
-      txt.setAttribute('aria-label', `Entry ${i + 1}`);
+      txt.setAttribute('aria-label', `Item ${i + 1}`);
       txt.addEventListener('input', () => { item.label = txt.value; save(); resetWheel(); });
       txt.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('newItem').focus(); } });
       txt.addEventListener('blur', () => {
@@ -270,7 +270,7 @@
 
       const x = document.createElement('button');
       x.type = 'button'; x.className = 'x'; x.innerHTML = X_ICON;
-      x.setAttribute('aria-label', `Remove ${item.label || 'entry'}`);
+      x.setAttribute('aria-label', `Remove ${item.label || 'item'}`);
       x.addEventListener('click', () => { items.splice(items.indexOf(item), 1); commit(); });
 
       li.append(dot, txt, x);
@@ -285,7 +285,7 @@
 
     const add = document.createElement('li');
     add.className = 'add';
-    add.innerHTML = '<svg class="plus" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.6 2.4"/><path d="M9 5.5v7M5.5 9h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input type="text" id="newItem" placeholder="Add entry" maxlength="60" aria-label="Add entry" autocomplete="off">';
+    add.innerHTML = '<svg class="plus" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.6 2.4"/><path d="M9 5.5v7M5.5 9h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input type="text" id="newItem" placeholder="Add item" maxlength="60" aria-label="Add item" autocomplete="off">';
     listEl.append(add);
     add.querySelector('input').addEventListener('keydown', e => {
       if (e.key !== 'Enter') return;
@@ -302,7 +302,7 @@
     });
   }
 
-  // Back to the start position: pointer centred on the first entry, no highlight
+  // Back to the start position: pointer centred on the first item, no highlight
   function resetWheel() {
     if (pending) { clearTimeout(pending.timer); pending = null; }
     countdown.classList.remove('run');
@@ -318,7 +318,7 @@
   }
 
   $('clearAll').addEventListener('click', () => {
-    if (items.length && confirm('Remove every entry from the wheel?')) { items = []; commit(); }
+    if (items.length && confirm('Remove every item from the wheel?')) { items = []; commit(); }
   });
   $('recolor').addEventListener('click', () => { items.forEach((it, i) => it.color = autoColor(i)); commit(); });
 
