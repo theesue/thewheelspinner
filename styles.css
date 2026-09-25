@@ -58,6 +58,9 @@
   /* iOS zooms into fields under 16px */
   input[type="text"] { font-size: 16px; }
 
+  /* No gray/teal flash when tapping icon buttons on phones */
+  :is(.pin-reveal, .lock-btn, .items-toggle, .x) { -webkit-tap-highlight-color: transparent; }
+
   /* No double-tap zoom when spinning fast; pinch-zoom still works */
   html, button, canvas, .wheel-wrap { touch-action: manipulation; }
 }
@@ -653,12 +656,13 @@
   }
   .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-block-start: 20px; }
 
-  /* PIN entry: one field, big dots */
+  /* PIN entry: one field, big dots, with a show/hide button on the right */
+  .pin-field { position: relative; margin-block-start: 16px; }
   .pin-input {
     display: block;
     inline-size: 100%;
-    margin-block-start: 16px;
-    padding: 12px;
+    padding: 12px 52px; /* equal on both sides so the digits stay centered */
+    -webkit-text-security: disc; /* masks without being a password field */
     border: 1px solid var(--faint);
     border-radius: 12px;
     background: var(--hover);
@@ -670,6 +674,30 @@
     text-indent: .6em; /* balance the trailing letter-spacing */
 
     &:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+    &.revealed { -webkit-text-security: none; }
+  }
+  .pin-reveal {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 6px;
+    margin-block: auto;
+    display: grid;
+    place-items: center;
+    inline-size: 40px;
+    block-size: 40px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--soft);
+    cursor: pointer;
+
+    @media (hover: hover) { &:hover { color: var(--ink); background: color-mix(in oklch, var(--ink) 8%, transparent); } }
+    .eye-closed { display: none; }
+    &[aria-pressed="true"] {
+      color: var(--ink);
+      .eye-open { display: none; }
+      .eye-closed { display: block; }
+    }
   }
   .pin-dialog .pin-error {
     min-block-size: 1.45em;

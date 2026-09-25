@@ -144,8 +144,19 @@
   <form id="pinForm" autocomplete="off" novalidate>
     <h2 id="pinTitle">Lock the wheel</h2>
     <p id="pinText">Choose a 4-digit PIN.</p>
-    <input class="pin-input" id="pinInput" type="password" inputmode="numeric" maxlength="4"
-           autocomplete="off" aria-labelledby="pinTitle" aria-describedby="pinText pinError">
+    <!-- A plain text field masked with CSS, not type="password", so browsers and
+         password managers don't offer to save it. The data-* attributes ask the
+         common managers (1Password, LastPass, Bitwarden, Dashlane) to skip it. -->
+    <div class="pin-field">
+      <input class="pin-input" id="pinInput" type="text" inputmode="numeric" maxlength="4"
+             name="wheel-pin" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+             data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"
+             aria-labelledby="pinTitle" aria-describedby="pinText pinError">
+      <button type="button" class="pin-reveal" id="pinReveal" aria-pressed="false" aria-label="Show PIN" title="Show PIN">
+        <svg class="eye-open" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M1.8 10s3-5.5 8.2-5.5 8.2 5.5 8.2 5.5-3 5.5-8.2 5.5S1.8 10 1.8 10z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="10" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        <svg class="eye-closed" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M1.8 10s3-5.5 8.2-5.5 8.2 5.5 8.2 5.5-3 5.5-8.2 5.5S1.8 10 1.8 10z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="10" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 3.5l13 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
     <p class="pin-error" id="pinError" aria-live="assertive"></p>
     <div class="confirm-actions">
       <button class="tool" type="button" id="pinCancel">Cancel</button>

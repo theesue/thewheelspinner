@@ -30,6 +30,7 @@
     itemsToggle: $('itemsToggle'), lockBtn: $('lockBtn'), repoLink: $('repoLink'),
     pinDialog: $('pinDialog'), pinForm: $('pinForm'), pinTitle: $('pinTitle'), pinText: $('pinText'),
     pinInput: $('pinInput'), pinError: $('pinError'), pinCancel: $('pinCancel'), pinSubmit: $('pinSubmit'),
+    pinReveal: $('pinReveal'),
   };
   const ctx = el.canvas.getContext('2d');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -738,7 +739,6 @@
     el.pinSubmit.textContent = action;
     el.pinError.textContent = error;
     el.pinInput.value = '';
-    el.pinInput.autocomplete = step === 'unlock' ? 'off' : 'new-password';
     el.pinInput.focus();
   }
 
@@ -751,10 +751,24 @@
     if (!state.lock && !canLock) { toast('Locking needs a secure (https) page.'); return; }
     firstPin = '';
     el.pinSubmit.disabled = false;
+    setPinRevealed(false);
     el.pinDialog.showModal();
     showPinStep(state.lock ? 'unlock' : 'set');
     const wait = cooldownLeft();
     if (wait) el.pinError.textContent = `Too many wrong tries. Try again in ${wait} seconds.`;
+  });
+
+  // Show/hide the digits. Starts hidden every time the dialog opens.
+  function setPinRevealed(on) {
+    el.pinInput.classList.toggle('revealed', on);
+    el.pinReveal.setAttribute('aria-pressed', String(on));
+    const label = on ? 'Hide PIN' : 'Show PIN';
+    el.pinReveal.setAttribute('aria-label', label);
+    el.pinReveal.title = label;
+  }
+  el.pinReveal.addEventListener('click', () => {
+    setPinRevealed(!el.pinInput.classList.contains('revealed'));
+    el.pinInput.focus(); // keep typing (and keep the phone keyboard up)
   });
 
   el.pinCancel.addEventListener('click', () => el.pinDialog.close());
@@ -762,13 +776,13 @@
     firstPin = '';
     el.pinInput.value = '';
     el.pinError.textContent = '';
+    setPinRevealed(false);
   });
 
-  // Digits only, and go ahead on the 4th one so it feels like a keypad
+  // Digits only; nothing is submitted until Enter or the button
   el.pinInput.addEventListener('input', () => {
     const digits = el.pinInput.value.replace(/\D/g, '').slice(0, 4);
     if (digits !== el.pinInput.value) el.pinInput.value = digits;
-    if (digits.length === 4 && !el.pinSubmit.disabled) el.pinForm.requestSubmit();
   });
 
   el.pinForm.addEventListener('submit', async e => {
