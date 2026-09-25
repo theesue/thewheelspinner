@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eceef2">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121316">
 <title>Spin the Wheel</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=8">
+<link rel="preload" href="fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css?v=9">
+<script src="script.js?v=9" defer></script>
 </head>
 <body>
 <div class="app">
@@ -18,25 +20,33 @@
         <circle cx="17" cy="14" r="5" fill="var(--surface)"/>
       </svg>
       <canvas id="wheel" aria-hidden="true"></canvas>
-      <button class="hub" id="spinBtn" type="button">Spin</button>
+      <button class="hub" id="spinBtn" type="button" disabled>Spin</button>
     </div>
-    <div class="result" id="result" role="status" aria-live="polite">
+
+    <div class="result" id="result" role="status" aria-live="polite" hidden>
       <span class="dot" id="resDot"></span>
       <span class="name" id="resName"></span>
       <button type="button" id="resRemove">Remove</button>
-      <button type="button" id="resClose" aria-label="Dismiss">Done</button>
+      <button type="button" id="resClose">Done</button>
       <span class="countdown" id="resCountdown" aria-hidden="true"></span>
     </div>
   </main>
 
-  <aside class="side">
+  <aside class="side" id="side">
     <fieldset id="controls">
-      <header>
+      <header class="side-head">
         <h1>Items</h1>
-        <span class="count" id="count"></span>
+        <span class="count" id="count">0 items</span>
       </header>
 
-      <ul class="list" id="list"></ul>
+      <div class="list-wrap" id="listWrap">
+        <ul class="list" id="list"></ul>
+        <p class="empty" id="empty">Nothing on the wheel yet.</p>
+        <form class="add" id="addForm" autocomplete="off">
+          <svg class="plus" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.6 2.4"/><path d="M9 5.5v7M5.5 9h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <input type="text" id="newItem" placeholder="Add item" maxlength="60" aria-label="Add item" enterkeyhint="done">
+        </form>
+      </div>
 
       <div class="foot">
         <details class="settings" id="settings">
@@ -45,9 +55,9 @@
             <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </summary>
           <div class="settings-body">
-            <div class="dur">
-              <div class="dur-top"><label for="spinTime">Spin time</label><output id="spinTimeOut" for="spinTime"></output></div>
-              <input type="range" id="spinTime" min="1" max="20" step="1">
+            <div class="range">
+              <div class="range-top"><label for="spinTime">Spin time</label><output id="spinTimeOut" for="spinTime">5s</output></div>
+              <input type="range" id="spinTime" min="1" max="20" step="1" value="5">
             </div>
 
             <label class="toggle">
@@ -66,21 +76,47 @@
               <input type="checkbox" class="switch" id="autoRemove" role="switch">
             </label>
 
-            <div class="dur sub" id="autoDelayRow">
-              <div class="dur-top"><label for="autoDelay">Show for</label><output id="autoDelayOut" for="autoDelay"></output></div>
-              <input type="range" id="autoDelay" min="1" max="10" step="1">
+            <div class="range sub" id="autoDelayRow" hidden>
+              <div class="range-top"><label for="autoDelay">Show for</label><output id="autoDelayOut" for="autoDelay">3s</output></div>
+              <input type="range" id="autoDelay" min="1" max="10" step="1" value="3">
             </div>
           </div>
         </details>
+
         <div class="tools">
+          <button class="tool" type="button" id="importBtn">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5v7.5M4 6l3 3 3-3M2 11.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Import CSV
+          </button>
           <button class="tool" type="button" id="recolor">Reset colors</button>
           <button class="tool danger" type="button" id="clearAll">Clear all</button>
+          <input type="file" id="csvFile" accept=".csv,.txt,text/csv,text/plain" hidden>
         </div>
       </div>
     </fieldset>
+    <div class="drop-hint" aria-hidden="true">Drop a CSV to add its items</div>
   </aside>
 </div>
 
-<script src="script.js?v=8"></script>
+<dialog class="confirm" id="clearDialog" closedby="any">
+  <form method="dialog">
+    <h2>Clear the wheel?</h2>
+    <p>This removes every item. It can't be undone.</p>
+    <div class="confirm-actions">
+      <button class="tool" value="cancel" autofocus>Cancel</button>
+      <button class="tool solid-danger" value="clear">Clear all</button>
+    </div>
+  </form>
+</dialog>
+
+<p class="toast" id="toast" role="status" aria-live="polite" hidden></p>
+
+<template id="rowTpl">
+  <li class="row">
+    <input type="color" class="dot-input" data-field="color">
+    <input type="text" maxlength="60" data-field="label">
+    <button type="button" class="x" data-action="remove"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+  </li>
+</template>
 </body>
 </html>
