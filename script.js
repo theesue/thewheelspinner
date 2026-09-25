@@ -5,7 +5,8 @@
   const STORE_KEY = 'spinwheel:v1';
   const MAX_CHARS = 26;      // wheel labels are cut here with an ellipsis
   const MAX_LABEL = 60;      // longest label we store
-  const MAX_IMPORT = 500;    // most items one CSV can add
+  const MAX_IMPORT = 1000;   // most items one CSV can add
+  const BIG_CSV = 100;       // more lines than this gets a readability heads-up
   const PAPA_SRC = 'vendor/papaparse.min.js?v=5.7.0';
 
   // Hand-picked palette; repeats get a lighter/darker shift so neighbours stay distinct
@@ -26,7 +27,9 @@
     autoDelay: $('autoDelay'), autoDelayOut: $('autoDelayOut'), autoDelayRow: $('autoDelayRow'),
     importBtn: $('importBtn'), csvFile: $('csvFile'), recolor: $('recolor'),
     clearAll: $('clearAll'), clearDialog: $('clearDialog'), toast: $('toast'),
-    itemsToggle: $('itemsToggle'),
+    itemsToggle: $('itemsToggle'), lockBtn: $('lockBtn'), repoLink: $('repoLink'),
+    pinDialog: $('pinDialog'), pinForm: $('pinForm'), pinTitle: $('pinTitle'), pinText: $('pinText'),
+    pinInput: $('pinInput'), pinError: $('pinError'), pinCancel: $('pinCancel'), pinSubmit: $('pinSubmit'),
   };
   const ctx = el.canvas.getContext('2d');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -36,6 +39,7 @@
     items: [],              // { label, color }
     seconds: 5,
     settings: { noRemove: false, autoRemove: false, autoDelay: 3, open: false, itemsOpen: true },
+    lock: null,             // { salt, hash, iter, fails, until } while locked; never the PIN itself
   };
   let rotation = 0;         // degrees, clockwise
   let anim = null;          // { t0, from, D, T } while spinning
@@ -100,6 +104,10 @@
         open: !!st.open,
         itemsOpen: st.itemsOpen !== false, // open unless someone collapsed it
       };
+      const lk = s.lock;
+      if (lk && typeof lk.salt === 'string' && typeof lk.hash === 'string' && lk.iter > 0) {
+        state.lock = { salt: lk.salt, hash: lk.hash, iter: lk.iter | 0, fails: lk.fails | 0, until: +lk.until || 0 };
+      }
     } catch { /* storage blocked or corrupt: start fresh */ }
   }
   let saveTimer = 0;
@@ -282,7 +290,7 @@
 
     if (winner > -1) { winner = -1; draw(); }
     hideResult();
-    el.controls.disabled = true;
+    setControlsState();
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(frame);
   }
@@ -313,17 +321,17 @@
     anim = null;
     rotation = ((rotation % 360) + 360) % 360;
     applyRotation();
-    el.controls.disabled = false;
+    setControlsState();
 
     winner = indexAtPointer();
     const item = state.items[winner];
     if (!item) return;
     draw();
 
-    const { noRemove, autoRemove, autoDelay } = state.settings;
+    const { autoRemove, autoDelay } = state.settings;
     el.resDot.style.background = item.color;
     el.resName.textContent = item.label;
-    el.resRemove.hidden = noRemove || autoRemove;
+    syncRemoveButton();
     el.result.hidden = false;
 
     el.countdown.classList.remove('run');
@@ -458,12 +466,12 @@
 
   // ---------- Result bar ----------
   el.resRemove.addEventListener('click', () => {
-    if (state.settings.noRemove || winner < 0) return;
+    if (state.settings.noRemove || state.lock || winner < 0) return;
     removeItem(winner);
   });
   el.resClose.addEventListener('click', hideResult);
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && !el.clearDialog.open) hideResult();
+    if (e.key === 'Escape' && !el.clearDialog.open && !el.pinDialog.open) hideResult();
   });
 
   el.canvas.addEventListener('click', spin);
@@ -493,14 +501,27 @@
     fillRange(el.spinTime);
     save();
   });
+  // The picked item's Remove button shows unless either setting takes it away.
+  // Runs on every change, so it comes back as soon as both are off.
+  function syncRemoveButton() {
+    el.resRemove.hidden = state.settings.noRemove || state.settings.autoRemove || !!state.lock;
+  }
+
   el.noRemove.addEventListener('change', () => {
     state.settings.noRemove = el.noRemove.checked;
-    if (state.settings.noRemove) el.resRemove.hidden = true;
+    syncRemoveButton();
     save();
   });
   el.autoRemove.addEventListener('change', () => {
     state.settings.autoRemove = el.autoRemove.checked;
     el.autoDelayRow.hidden = !state.settings.autoRemove;
+    // Turned off during a countdown: keep the picked item on the wheel
+    if (!state.settings.autoRemove && pending) {
+      clearTimeout(pending.timer);
+      pending = null;
+      el.countdown.classList.remove('run');
+    }
+    syncRemoveButton();
     save();
   });
   el.autoDelay.addEventListener('input', () => {
@@ -527,11 +548,11 @@
 
   // ---------- Toast ----------
   let toastTimer = 0;
-  function toast(msg) {
+  function toast(msg, ms = 3000) {
     el.toast.textContent = msg;
     el.toast.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { el.toast.hidden = true; }, 3000);
+    toastTimer = setTimeout(() => { el.toast.hidden = true; }, ms);
   }
 
   // ---------- CSV import (Papa Parse loads only when first needed) ----------
@@ -580,6 +601,7 @@
 
   async function importFile(file) {
     if (!file) return;
+    if (state.lock) { toast('The wheel is locked. Unlock it to import.'); return; }
     if (anim) { toast('Wait for the wheel to stop, then import.'); return; }
     if (file.size > 5 * 1024 * 1024) { toast('That file is too large (5 MB max).'); return; }
 
@@ -599,6 +621,7 @@
     const found = extractItems(rows);
     if (!found.length) { toast('No items found in that file.'); return; }
 
+    // One at a time, so nextColor() sees the ones just added and colors don't repeat
     const added = found.slice(0, MAX_IMPORT);
     for (const it of added) state.items.push({ label: it.label, color: it.color ?? nextColor() });
     commit();
@@ -606,9 +629,12 @@
     el.listWrap.scrollTop = el.listWrap.scrollHeight;
 
     const noun = added.length === 1 ? 'item' : 'items';
-    toast(found.length > MAX_IMPORT
-      ? `Added the first ${MAX_IMPORT} of ${found.length} items.`
-      : `Added ${added.length} ${noun} from ${file.name}.`);
+    let msg = found.length > MAX_IMPORT
+      ? `Added the first ${MAX_IMPORT.toLocaleString()} of ${found.length.toLocaleString()} items.`
+      : `Added ${added.length.toLocaleString()} ${noun} from ${file.name}.`;
+    const big = rows.length > BIG_CSV;
+    if (big) msg += ` That's over ${BIG_CSV} lines, so the labels on the wheel will be small.`;
+    toast(msg, big ? 7000 : 3000);
   }
 
   // Start fetching the parser as soon as someone heads for the button
@@ -624,13 +650,13 @@
   // Drag a CSV onto the item panel
   const hasFiles = e => e.dataTransfer?.types.includes('Files');
   el.side.addEventListener('dragenter', e => {
-    if (!hasFiles(e)) return;
+    if (!hasFiles(e) || state.lock) return;
     e.preventDefault();
     el.side.classList.add('dragging');
     warmPapa();
   });
   el.side.addEventListener('dragover', e => {
-    if (!hasFiles(e)) return;
+    if (!hasFiles(e) || state.lock) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   });
@@ -638,7 +664,7 @@
     if (!el.side.contains(e.relatedTarget)) el.side.classList.remove('dragging');
   });
   el.side.addEventListener('drop', e => {
-    if (!hasFiles(e)) return;
+    if (!hasFiles(e) || state.lock) return;
     e.preventDefault();
     el.side.classList.remove('dragging');
     importFile(e.dataTransfer.files[0]);
@@ -647,11 +673,167 @@
   addEventListener('dragover', e => hasFiles(e) && e.preventDefault());
   addEventListener('drop', e => hasFiles(e) && e.preventDefault());
 
+  // ---------- What can be used right now ----------
+  // Controls are off while spinning or locked. The GitHub link only goes inert
+  // mid-spin; the lock button stays reachable so the wheel can be unlocked.
+  function setControlsState() {
+    const spinning = !!anim;
+    el.controls.disabled = spinning || !!state.lock;
+    el.side.classList.toggle('spinning', spinning);
+    el.repoLink.inert = spinning;
+    el.lockBtn.disabled = spinning;
+  }
+
+  // ---------- PIN lock ----------
+  // The PIN never touches storage. It's stretched with PBKDF2 (SHA-256) and a random
+  // salt, and only that hash is kept. A 4-digit PIN has 10,000 combinations, so treat
+  // this as a guard against casual tampering on a shared screen, not real security.
+  const PIN_ITER = 150_000;
+  const MAX_TRIES = 5;
+  const COOLDOWN_MS = 30_000;
+  const canLock = !!globalThis.crypto?.subtle;
+
+  const b64 = bytes => btoa(String.fromCharCode(...bytes));
+  const unb64 = str => Uint8Array.from(atob(str), c => c.charCodeAt(0));
+
+  async function hashPin(pin, salt, iter) {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, key, 256);
+    return new Uint8Array(bits);
+  }
+  function sameBytes(a, b) {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+    return diff === 0;
+  }
+
+  function applyLock() {
+    const locked = !!state.lock;
+    el.side.classList.toggle('locked', locked);
+    const label = locked ? 'Unlock with your PIN' : 'Lock with a PIN';
+    el.lockBtn.setAttribute('aria-label', label);
+    el.lockBtn.title = label;
+    el.lockBtn.setAttribute('aria-pressed', String(locked));
+    el.lockBtn.hidden = !canLock && !locked;
+    setControlsState();
+    syncRemoveButton();
+  }
+
+  // Dialog steps: 'set' -> 'confirm' when locking, 'unlock' when unlocking
+  let pinStep = 'set';
+  let firstPin = '';
+
+  const PIN_COPY = {
+    set:     ['Lock the wheel', 'Choose a 4-digit PIN. You’ll need it to change anything again. Spinning still works.', 'Next'],
+    confirm: ['Confirm your PIN', 'Enter the same 4 digits again.', 'Lock'],
+    unlock:  ['Unlock the wheel', 'Enter your 4-digit PIN.', 'Unlock'],
+  };
+
+  function showPinStep(step, error = '') {
+    pinStep = step;
+    const [title, text, action] = PIN_COPY[step];
+    el.pinTitle.textContent = title;
+    el.pinText.textContent = text;
+    el.pinSubmit.textContent = action;
+    el.pinError.textContent = error;
+    el.pinInput.value = '';
+    el.pinInput.autocomplete = step === 'unlock' ? 'off' : 'new-password';
+    el.pinInput.focus();
+  }
+
+  function cooldownLeft() {
+    return state.lock ? Math.max(0, Math.ceil((state.lock.until - Date.now()) / 1000)) : 0;
+  }
+
+  el.lockBtn.addEventListener('click', () => {
+    if (anim) return;
+    if (!state.lock && !canLock) { toast('Locking needs a secure (https) page.'); return; }
+    firstPin = '';
+    el.pinSubmit.disabled = false;
+    el.pinDialog.showModal();
+    showPinStep(state.lock ? 'unlock' : 'set');
+    const wait = cooldownLeft();
+    if (wait) el.pinError.textContent = `Too many wrong tries. Try again in ${wait} seconds.`;
+  });
+
+  el.pinCancel.addEventListener('click', () => el.pinDialog.close());
+  el.pinDialog.addEventListener('close', () => {
+    firstPin = '';
+    el.pinInput.value = '';
+    el.pinError.textContent = '';
+  });
+
+  // Digits only, and go ahead on the 4th one so it feels like a keypad
+  el.pinInput.addEventListener('input', () => {
+    const digits = el.pinInput.value.replace(/\D/g, '').slice(0, 4);
+    if (digits !== el.pinInput.value) el.pinInput.value = digits;
+    if (digits.length === 4 && !el.pinSubmit.disabled) el.pinForm.requestSubmit();
+  });
+
+  el.pinForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const pin = el.pinInput.value;
+    if (!/^\d{4}$/.test(pin)) { el.pinError.textContent = 'Enter 4 digits.'; el.pinInput.focus(); return; }
+
+    if (pinStep === 'set') {
+      firstPin = pin;
+      showPinStep('confirm');
+      return;
+    }
+
+    el.pinSubmit.disabled = true;
+    try {
+      if (pinStep === 'confirm') {
+        if (pin !== firstPin) { firstPin = ''; showPinStep('set', 'Those PINs didn’t match. Start again.'); return; }
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const hash = await hashPin(pin, salt, PIN_ITER);
+        state.lock = { salt: b64(salt), hash: b64(hash), iter: PIN_ITER, fails: 0, until: 0 };
+        firstPin = '';
+        writeNow();
+        el.pinDialog.close();
+        hideResult();
+        applyLock();
+        toast('Locked. People can spin, but nothing can be changed.');
+        return;
+      }
+
+      // Unlock
+      const wait = cooldownLeft();
+      if (wait) { showPinStep('unlock', `Too many wrong tries. Try again in ${wait} seconds.`); return; }
+      const lock = state.lock;
+      const hash = await hashPin(pin, unb64(lock.salt), lock.iter);
+      if (sameBytes(hash, unb64(lock.hash))) {
+        state.lock = null;
+        writeNow();
+        el.pinDialog.close();
+        applyLock();
+        toast('Unlocked.');
+        return;
+      }
+      lock.fails += 1;
+      let msg;
+      if (lock.fails >= MAX_TRIES) {
+        lock.fails = 0;
+        lock.until = Date.now() + COOLDOWN_MS;
+        msg = `Too many wrong tries. Try again in ${COOLDOWN_MS / 1000} seconds.`;
+      } else {
+        const left = MAX_TRIES - lock.fails;
+        msg = `Wrong PIN. ${left} ${left === 1 ? 'try' : 'tries'} left.`;
+      }
+      writeNow();
+      showPinStep('unlock', msg);
+    } finally {
+      el.pinSubmit.disabled = false;
+    }
+  });
+
   // ---------- Init ----------
   load();
   syncSettings();
   render();
   resetWheel();
+  applyLock();
   draw(); // now, not next frame, so the first paint already has the real wheel
 
   // Transitions stay off until the restored state has painted (see styles.css)

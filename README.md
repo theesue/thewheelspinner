@@ -1,6 +1,6 @@
 # Spin the Wheel
 
-A simple, no ADs, spin-the-wheel for whatever you need. It's plain HTML, CSS and JavaScript. No framework, no sign-up, and everything you add stays in your browser.
+A simple spin-the-wheel you can use to pick names, decide where to eat, choose who goes first, whatever you need. It's plain HTML, CSS and JavaScript. No framework, no sign-up, and everything you add stays in your browser.
 
 ## What it does
 
@@ -9,6 +9,7 @@ A simple, no ADs, spin-the-wheel for whatever you need. It's plain HTML, CSS and
 - When it stops, the picked item shows up at the top and the rest of the wheel fades out so it's easy to see.
 - Import a list from a CSV file with the Import CSV button, or just drag the file onto the item list.
 - Your items and settings are saved in your browser, so they'll still be there next time you open the page.
+- Lock the wheel with a 4-digit PIN using the padlock next to Items. While it's locked, anyone can still spin, but nobody can add, remove, edit or recolor items, change settings, or import a file until the PIN is entered. The PIN itself is never saved, only a salted hash of it. Just keep in mind a 4-digit PIN on a web page is there to stop casual tampering, not a determined person with dev tools.
 
 The Settings menu has a few options:
 
@@ -50,7 +51,7 @@ Jordan,
 Sam,#0af
 ```
 
-Items without a color get one picked for them. Imported items are added to whatever's already on the wheel, up to 500 per file.
+Items without a color get one picked for them. Imported items are added to whatever's already on the wheel, up to 1,000 per file. If a file has more than 100 lines you'll get a heads-up, since the labels get pretty small at that point.
 
 ## Working on it
 

@@ -267,8 +267,34 @@
   /* Sidebar */
   /* Items heading doubles as the collapse toggle, styled like the Settings row */
   .side-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     padding: 14px 14px 6px;
-    h1 { font: inherit; }
+    h1 { flex: 1; min-inline-size: 0; font: inherit; }
+  }
+
+  /* PIN lock toggle: open padlock when unlocked, filled one when locked */
+  .lock-btn {
+    flex: none;
+    display: grid;
+    place-items: center;
+    inline-size: 40px;
+    block-size: 40px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--soft);
+    cursor: pointer;
+
+    @media (hover: hover) { &:hover { background: var(--hover); color: var(--ink); } }
+    .icon-locked { display: none; }
+  }
+  .side.locked .lock-btn {
+    background: var(--hover);
+    color: var(--ink);
+    .icon-locked { display: block; }
+    .icon-unlocked { display: none; }
   }
   .items-toggle {
     display: flex;
@@ -553,6 +579,14 @@
       font-weight: 600;
       &:hover { background: color-mix(in oklch, var(--danger) 88%, black); }
     }
+    &.solid {
+      background: var(--ink);
+      border-color: var(--ink);
+      color: var(--surface);
+      font-weight: 600;
+      &:hover { background: color-mix(in oklch, var(--ink) 85%, var(--surface)); }
+      &:disabled { opacity: .6; cursor: progress; }
+    }
   }
 
   .repo-link {
@@ -569,7 +603,21 @@
     &:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
   }
 
-  #controls:disabled :is(.list-wrap, .foot) { opacity: .5; }
+  /* Mid-spin: everything below the heading is dimmed and disabled */
+  .side.spinning :is(.list-wrap, .foot) { opacity: .5; }
+
+  /* Disabled item names stay readable (browsers fade disabled text by default) */
+  .row input[type="text"]:disabled { color: inherit; -webkit-text-fill-color: currentColor; opacity: 1; }
+  .row .dot-input:disabled { cursor: default; }
+
+  /* Locked: the list reads normally, but every way to change it is gone */
+  .lock-note { display: none; color: var(--soft); font-size: 14px; padding: 10px 12px 4px; text-wrap: pretty; }
+  .side.locked {
+    .lock-note { display: block; }
+    :is(.add, .x, .tools) { display: none; }
+    .settings-body { opacity: .55; }
+    .row:is(:hover, :focus-within) { background: none; }
+  }
 
   /* Drag-and-drop CSV */
   .drop-hint {
@@ -605,13 +653,44 @@
   }
   .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-block-start: 20px; }
 
+  /* PIN entry: one field, big dots */
+  .pin-input {
+    display: block;
+    inline-size: 100%;
+    margin-block-start: 16px;
+    padding: 12px;
+    border: 1px solid var(--faint);
+    border-radius: 12px;
+    background: var(--hover);
+    color: var(--ink);
+    font-size: 28px; /* also keeps iOS from zooming in */
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .6em;
+    text-align: center;
+    text-indent: .6em; /* balance the trailing letter-spacing */
+
+    &:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  }
+  .pin-dialog .pin-error {
+    min-block-size: 1.45em;
+    margin-block-start: 8px;
+    color: var(--danger);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .pin-dialog .confirm-actions { margin-block-start: 12px; }
+
   /* Toast */
   .toast {
     position: fixed;
-    inset-inline-start: 50%;
-    inset-block-end: calc(24px + env(safe-area-inset-bottom, 0px));
-    translate: -50% 0;
-    max-inline-size: calc(100vw - 32px);
+    /* Pinned to both sides and centered with auto margins, so it can use the full width */
+    inset: auto 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    inline-size: fit-content;
+    max-inline-size: min(520px, calc(100vw - 32px));
+    margin-inline: auto;
     padding: 10px 16px;
     border-radius: 12px;
     background: var(--ink);
@@ -620,8 +699,8 @@
     z-index: 10;
     transition: opacity .2s, translate .25s var(--ease-out), display .25s allow-discrete;
 
-    @starting-style { opacity: 0; translate: -50% 12px; }
-    &[hidden] { display: none !important; opacity: 0; translate: -50% 12px; }
+    @starting-style { opacity: 0; translate: 0 12px; }
+    &[hidden] { display: none !important; opacity: 0; translate: 0 12px; }
   }
 }
 
