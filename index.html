@@ -49,12 +49,17 @@
   </main>
 
   <aside class="side" id="side">
-    <fieldset id="controls">
-      <header class="side-head">
-        <h1>Items</h1>
-        <span class="count" id="count"></span>
-      </header>
+    <header class="side-head">
+      <h1>
+        <button type="button" class="items-toggle" id="itemsToggle" aria-expanded="true" aria-controls="listWrap">
+          <span class="items-title">Items</span>
+          <span class="count" id="count"></span>
+          <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </h1>
+    </header>
 
+    <fieldset id="controls">
       <div class="list-wrap" id="listWrap">
         <ul class="list" id="list"></ul>
         <p class="empty" id="empty">Nothing on the wheel yet.</p>

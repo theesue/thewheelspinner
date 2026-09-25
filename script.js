@@ -26,6 +26,7 @@
     autoDelay: $('autoDelay'), autoDelayOut: $('autoDelayOut'), autoDelayRow: $('autoDelayRow'),
     importBtn: $('importBtn'), csvFile: $('csvFile'), recolor: $('recolor'),
     clearAll: $('clearAll'), clearDialog: $('clearDialog'), toast: $('toast'),
+    itemsToggle: $('itemsToggle'),
   };
   const ctx = el.canvas.getContext('2d');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -34,7 +35,7 @@
   const state = {
     items: [],              // { label, color }
     seconds: 5,
-    settings: { noRemove: false, autoRemove: false, autoDelay: 3, open: false },
+    settings: { noRemove: false, autoRemove: false, autoDelay: 3, open: false, itemsOpen: true },
   };
   let rotation = 0;         // degrees, clockwise
   let anim = null;          // { t0, from, D, T } while spinning
@@ -97,6 +98,7 @@
         autoRemove: !!st.autoRemove,
         autoDelay: Math.min(10, Math.max(1, +st.autoDelay || 3)),
         open: !!st.open,
+        itemsOpen: st.itemsOpen !== false, // open unless someone collapsed it
       };
     } catch { /* storage blocked or corrupt: start fresh */ }
   }
@@ -482,6 +484,7 @@
     fillRange(el.autoDelay);
     el.autoDelayRow.hidden = !s.autoRemove;
     el.settings.open = s.open;
+    setItemsOpen(s.itemsOpen);
   }
 
   el.spinTime.addEventListener('input', () => {
@@ -508,6 +511,17 @@
   });
   el.settings.addEventListener('toggle', () => {
     state.settings.open = el.settings.open;
+    save();
+  });
+
+  // ---------- Collapsible item list ----------
+  function setItemsOpen(open) {
+    state.settings.itemsOpen = open;
+    el.itemsToggle.setAttribute('aria-expanded', String(open));
+    el.listWrap.hidden = !open;
+  }
+  el.itemsToggle.addEventListener('click', () => {
+    setItemsOpen(!state.settings.itemsOpen);
     save();
   });
 
@@ -588,6 +602,7 @@
     const added = found.slice(0, MAX_IMPORT);
     for (const it of added) state.items.push({ label: it.label, color: it.color ?? nextColor() });
     commit();
+    if (!state.settings.itemsOpen) setItemsOpen(true); // show what was just added
     el.listWrap.scrollTop = el.listWrap.scrollHeight;
 
     const noun = added.length === 1 ? 'item' : 'items';

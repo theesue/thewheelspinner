@@ -265,15 +265,31 @@
   }
 
   /* Sidebar */
+  /* Items heading doubles as the collapse toggle, styled like the Settings row */
   .side-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 22px 22px 8px;
-
-    h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+    padding: 14px 14px 6px;
+    h1 { font: inherit; }
   }
+  .items-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    inline-size: 100%;
+    padding: 8px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    text-align: start;
+    cursor: pointer;
+    user-select: none;
+
+    /* Only real pointers get hover, so a tap doesn't leave the row highlighted */
+    @media (hover: hover) { &:hover { background: var(--hover); } }
+
+    .chev { flex: none; color: var(--soft); transition: rotate .2s ease; }
+    &[aria-expanded="true"] .chev { rotate: 180deg; }
+  }
+  .items-title { flex: 1; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
   .count { color: var(--soft); font-size: 14px; font-variant-numeric: tabular-nums; }
 
   .list-wrap {
@@ -282,6 +298,10 @@
     overscroll-behavior: contain;
     padding: 6px 10px;
     scrollbar-gutter: stable;
+    transition: opacity .2s ease, display .2s allow-discrete;
+
+    @starting-style { opacity: 0; }
+    &[hidden] { opacity: 0; }
   }
 
   .row, .add {
@@ -396,7 +416,7 @@
       user-select: none;
 
       &::-webkit-details-marker { display: none; }
-      &:hover { background: var(--hover); }
+      @media (hover: hover) { &:hover { background: var(--hover); } }
     }
 
     .chev { color: var(--soft); transition: rotate .2s ease; }
