@@ -24,6 +24,7 @@ await mkdir(OUT, { recursive: true });
 // Static folders are copied as-is (the font and Papa Parse are already compressed/minified)
 await cp('fonts', `${OUT}/fonts`, { recursive: true });
 await cp('vendor', `${OUT}/vendor`, { recursive: true });
+for (const icon of ['favicon.ico', 'favicon.svg', 'apple-touch-icon.png']) await cp(icon, `${OUT}/${icon}`);
 
 // JS: no `target`, so modern syntax (??=, ?.) is kept as written
 const js = (await transform(await readFile('script.js', 'utf8'), {
