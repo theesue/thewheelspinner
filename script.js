@@ -647,4 +647,13 @@
 
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', requestDraw);
   document.fonts?.ready.then(() => { labelCache.clear(); requestDraw(); });
+
+  // Offline + long-term caching. Only the built site has a working sw.js,
+  // so skip it for local files and when running the unbuilt source.
+  const isBuilt = !!document.querySelector('script[src*="script."][src$=".js"]:not([src="script.js"])');
+  if ('serviceWorker' in navigator && location.protocol !== 'file:' && isBuilt) {
+    addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => { /* caching is optional */ });
+    }, { once: true });
+  }
 })();
