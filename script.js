@@ -6,6 +6,9 @@
   const listEl = $('list'), countEl = $('count'), controls = $('controls');
   const spinTime = $('spinTime'), spinTimeOut = $('spinTimeOut');
   const result = $('result');
+  const noRemove = $('noRemove'), autoRemove = $('autoRemove');
+  const autoDelay = $('autoDelay'), autoDelayOut = $('autoDelayOut'), autoDelayRow = $('autoDelayRow');
+  const countdown = $('resCountdown');
 
   // Hand-picked palette; repeats get a lighter/darker shift so neighbours stay distinct
   const PALETTE = ['#ff5a36','#ffb000','#1fb58f','#3d5afe','#9b5de5','#f0508c',
@@ -29,6 +32,8 @@
   const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
   // ---------- State ----------
+  let settings = { noRemove: false, autoRemove: false, autoDelay: 3, open: false };
+  let pending = null; // { item, timer } while an auto-remove is counting down
   let items = [], seconds = 5, rotation = 0, anim = null, raf = 0, lastIndex = -1, winner = -1;
 
   function load() {
@@ -37,12 +42,18 @@
       if (s && Array.isArray(s.items)) {
         items = s.items.filter(x => x && typeof x.label === 'string' && /^#[0-9a-f]{6}$/i.test(x.color));
         seconds = Math.min(20, Math.max(1, +s.seconds || 5));
+        if (s.settings) {
+          settings.noRemove = !!s.settings.noRemove;
+          settings.autoRemove = !!s.settings.autoRemove;
+          settings.autoDelay = Math.min(10, Math.max(1, +s.settings.autoDelay || 3));
+          settings.open = !!s.settings.open;
+        }
         return;
       }
     } catch (e) {}
     items = [];
   }
-  function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify({ items, seconds })); } catch (e) {} }
+  function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify({ items, seconds, settings })); } catch (e) {} }
 
   // ---------- Drawing ----------
   function fit(text, max) {
@@ -156,6 +167,7 @@
   }
 
   function spin() {
+    flushPending();          // an entry waiting to be auto-removed goes before the next spin
     if (!items.length) return;
     const now = performance.now();
     const s = state(now);
@@ -193,15 +205,38 @@
     if (!it) return;
     $('resDot').style.background = it.color;
     $('resName').textContent = it.label;
+    $('resRemove').hidden = settings.noRemove || settings.autoRemove;
     result.classList.add('show');
+
+    countdown.classList.remove('run');
+    if (settings.autoRemove) {
+      countdown.style.setProperty('--delay', settings.autoDelay + 's');
+      void countdown.offsetWidth; // restart the drain animation
+      countdown.classList.add('run');
+      pending = { item: it, timer: setTimeout(flushPending, settings.autoDelay * 1000) };
+    }
+  }
+
+  // Remove the entry that's waiting on the auto-remove timer, if any
+  function flushPending() {
+    if (!pending) return;
+    const { item, timer } = pending;
+    pending = null;
+    clearTimeout(timer);
+    countdown.classList.remove('run');
+    const i = items.indexOf(item);
+    if (i > -1) { items.splice(i, 1); commit(); }
   }
 
   function hideResult() {
+    if (pending) { flushPending(); return; }
     result.classList.remove('show');
+    countdown.classList.remove('run');
     if (winner > -1) { winner = -1; draw(); }
   }
 
   $('resRemove').addEventListener('click', () => {
+    if (settings.noRemove) return;
     if (winner > -1) items.splice(winner, 1);
     winner = -1; result.classList.remove('show'); commit();
   });
@@ -269,6 +304,8 @@
 
   // Back to the start position: pointer centred on the first entry, no highlight
   function resetWheel() {
+    if (pending) { clearTimeout(pending.timer); pending = null; }
+    countdown.classList.remove('run');
     rotation = items.length ? -(360 / items.length) / 2 : 0;
     winner = -1;
     result.classList.remove('show');
@@ -285,11 +322,37 @@
   });
   $('recolor').addEventListener('click', () => { items.forEach((it, i) => it.color = autoColor(i)); commit(); });
 
+  const fillRange = r => r.style.setProperty('--fill', `${(r.value - r.min) / (r.max - r.min) * 100}%`);
   function syncRange() {
     spinTimeOut.textContent = `${seconds}s`;
-    spinTime.style.setProperty('--fill', `${(seconds - 1) / 19 * 100}%`);
+    fillRange(spinTime);
   }
   spinTime.addEventListener('input', () => { seconds = +spinTime.value; syncRange(); save(); });
+
+  function syncSettings() {
+    noRemove.checked = settings.noRemove;
+    autoRemove.checked = settings.autoRemove;
+    autoDelay.value = settings.autoDelay;
+    autoDelayOut.textContent = `${settings.autoDelay}s`;
+    fillRange(autoDelay);
+    autoDelayRow.hidden = !settings.autoRemove;
+    $('settings').open = settings.open;
+  }
+  noRemove.addEventListener('change', () => {
+    settings.noRemove = noRemove.checked; save();
+    if (settings.noRemove) $('resRemove').hidden = true;
+  });
+  autoRemove.addEventListener('change', () => {
+    settings.autoRemove = autoRemove.checked;
+    autoDelayRow.hidden = !settings.autoRemove;
+    save();
+  });
+  autoDelay.addEventListener('input', () => {
+    settings.autoDelay = +autoDelay.value;
+    autoDelayOut.textContent = `${settings.autoDelay}s`;
+    fillRange(autoDelay); save();
+  });
+  $('settings').addEventListener('toggle', () => { settings.open = $('settings').open; save(); });
 
   canvas.addEventListener('click', spin);
   spinBtn.addEventListener('click', spin);
@@ -299,7 +362,7 @@
 
   // ---------- Init ----------
   load();
-  spinTime.value = seconds; syncRange();
+  spinTime.value = seconds; syncRange(); syncSettings();
   renderList();
   resetWheel();
   new ResizeObserver(draw).observe(wrap);

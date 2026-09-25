@@ -25,6 +25,7 @@
       <span class="name" id="resName"></span>
       <button type="button" id="resRemove">Remove</button>
       <button type="button" id="resClose" aria-label="Dismiss">Done</button>
+      <span class="countdown" id="resCountdown" aria-hidden="true"></span>
     </div>
   </main>
 
@@ -38,10 +39,41 @@
       <ul class="list" id="list"></ul>
 
       <div class="foot">
-        <div class="dur">
-          <div class="dur-top"><label for="spinTime">Spin time</label><output id="spinTimeOut" for="spinTime"></output></div>
-          <input type="range" id="spinTime" min="1" max="20" step="1">
-        </div>
+        <details class="settings" id="settings">
+          <summary>
+            Settings
+            <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </summary>
+          <div class="settings-body">
+            <div class="dur">
+              <div class="dur-top"><label for="spinTime">Spin time</label><output id="spinTimeOut" for="spinTime"></output></div>
+              <input type="range" id="spinTime" min="1" max="20" step="1">
+            </div>
+
+            <label class="toggle">
+              <span class="toggle-text">
+                <span>Disable remove item</span>
+                <small>Hide the Remove button on the picked entry</small>
+              </span>
+              <input type="checkbox" id="noRemove" role="switch">
+              <span class="switch" aria-hidden="true"></span>
+            </label>
+
+            <label class="toggle">
+              <span class="toggle-text">
+                <span>Remove on select</span>
+                <small>Take the picked entry off the wheel automatically</small>
+              </span>
+              <input type="checkbox" id="autoRemove" role="switch">
+              <span class="switch" aria-hidden="true"></span>
+            </label>
+
+            <div class="dur sub" id="autoDelayRow">
+              <div class="dur-top"><label for="autoDelay">Show for</label><output id="autoDelayOut" for="autoDelay"></output></div>
+              <input type="range" id="autoDelay" min="1" max="10" step="1">
+            </div>
+          </div>
+        </details>
         <div class="tools">
           <button class="tool" type="button" id="recolor">Reset colors</button>
           <button class="tool danger" type="button" id="clearAll">Clear all</button>
