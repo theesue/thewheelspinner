@@ -112,6 +112,16 @@
     container-type: inline-size;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+
+    /* Stand-in wheel painted from the saved colors (set in <head>) until the canvas draws */
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      border-radius: 50%;
+      background: var(--wheel-bg, var(--surface));
+    }
+    &.drawn::before { display: none; }
   }
 
   canvas {
@@ -321,6 +331,8 @@
   }
 
   .empty { color: var(--soft); padding: 8px 12px 4px; font-size: 14px; }
+  /* Don't flash "Nothing on the wheel yet" before saved items are rendered */
+  :root:not(.ready) .empty { visibility: hidden; }
   /* Only show the empty note while the list has no rows */
   .list:has(.row) + .empty { display: none; }
 
@@ -494,6 +506,20 @@
     }
   }
 
+  .repo-link {
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-block-start: -4px;
+    color: var(--soft);
+    font-size: 13px;
+    text-decoration: none;
+    border-radius: 4px;
+
+    &:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+  }
+
   #controls:disabled :is(.list-wrap, .foot) { opacity: .5; }
 
   /* Drag-and-drop CSV */
@@ -552,9 +578,17 @@
 
 /* ---------- Motion preferences ---------- */
 @layer motion {
+  /* Restoring saved settings on load (open menu, switches on) shouldn't animate */
+  :root:not(.ready) *,
+  :root:not(.ready) *::before,
+  :root:not(.ready) *::after {
+    transition: none !important;
+  }
+  /* Kept separate: browsers that don't know ::details-content would drop the whole list */
+  :root:not(.ready) ::details-content { transition: none !important; }
+
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after, ::details-content {
-      transition-duration: 0s !important;
-    }
+    *, *::before, *::after { transition-duration: 0s !important; }
+    ::details-content { transition-duration: 0s !important; }
   }
 }

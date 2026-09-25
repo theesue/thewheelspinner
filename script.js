@@ -174,6 +174,7 @@
     if (el.canvas.width !== px) { el.canvas.width = px; el.canvas.height = px; }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size, size);
+    el.wrap.classList.add('drawn'); // retire the stand-in wheel from <head>
 
     // Theme colors come from resolved styles, since light-dark() can't go into a canvas directly
     const surface = getComputedStyle(el.spinBtn).backgroundColor;
@@ -636,6 +637,12 @@
   syncSettings();
   render();
   resetWheel();
+  draw(); // now, not next frame, so the first paint already has the real wheel
+
+  // Transitions stay off until the restored state has painted (see styles.css)
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    document.documentElement.classList.add('ready');
+  }));
 
   new ResizeObserver(([entry]) => {
     const size = entry.contentBoxSize?.[0]?.inlineSize ?? entry.contentRect.width;

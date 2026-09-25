@@ -9,7 +9,20 @@
 <title>Spin the Wheel</title>
 <link rel="preload" href="fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
-<script src="script.js" defer></script>
+<script>
+  // Paint the saved wheel colors before anything else loads, so a refresh never
+  // shows an empty wheel while script.js starts up. script.js draws the real wheel on top.
+  (function () {
+    try {
+      var saved = JSON.parse(localStorage.getItem('spinwheel:v1') || 'null');
+      var items = (saved && saved.items || []).filter(function (x) { return /^#[0-9a-f]{6}$/i.test(x && x.color); });
+      if (!items.length) return;
+      var a = 360 / items.length, stops = [];
+      for (var i = 0; i < items.length; i++) stops.push(items[i].color + ' ' + i * a + 'deg ' + (i + 1) * a + 'deg');
+      document.documentElement.style.setProperty('--wheel-bg', 'conic-gradient(from ' + -a / 2 + 'deg, ' + stops.join(', ') + ')');
+    } catch (e) {}
+  })();
+</script>
 </head>
 <body>
 <div class="app">
@@ -36,7 +49,7 @@
     <fieldset id="controls">
       <header class="side-head">
         <h1>Items</h1>
-        <span class="count" id="count">0 items</span>
+        <span class="count" id="count"></span>
       </header>
 
       <div class="list-wrap" id="listWrap">
@@ -92,6 +105,11 @@
           <button class="tool danger" type="button" id="clearAll">Clear all</button>
           <input type="file" id="csvFile" accept=".csv,.txt,text/csv,text/plain" hidden>
         </div>
+
+        <a class="repo-link" href="https://github.com/theesue/thewheelspinner" target="_blank" rel="noopener">
+          View source on GitHub
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5h5v5M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
       </div>
     </fieldset>
     <div class="drop-hint" aria-hidden="true">Drop a CSV to add its items</div>
@@ -118,5 +136,7 @@
     <button type="button" class="x" data-action="remove"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
   </li>
 </template>
+
+<script src="script.js"></script>
 </body>
 </html>
