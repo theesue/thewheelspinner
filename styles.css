@@ -172,26 +172,26 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: contents; }
 .toggle-text { flex: 1; display: grid; gap: 2px; }
 .toggle-text span { font-weight: 600; }
 .toggle-text small { color: var(--soft); font-size: 13px; line-height: 1.35; }
-.toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
 .switch {
-  flex: none; width: 38px; height: 22px; border-radius: 22px;
+  -webkit-appearance: none; appearance: none; margin: 0; cursor: pointer;
+  flex: none; width: 42px; height: 24px; border-radius: 24px; border: 0;
   background: var(--faint); position: relative; transition: background .18s ease;
 }
 .switch::after {
   content: ""; position: absolute; top: 3px; left: 3px;
-  width: 16px; height: 16px; border-radius: 50%; background: var(--surface);
+  width: 18px; height: 18px; border-radius: 50%; background: var(--surface);
   box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .18s ease;
 }
-.toggle input:checked + .switch { background: var(--ink); }
-.toggle input:checked + .switch::after { transform: translateX(16px); }
-.toggle input:focus-visible + .switch { outline: 2px solid var(--focus); outline-offset: 2px; }
+.switch:checked { background: var(--ink); }
+.switch:checked::after { transform: translateX(18px); }
+.switch:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .dur.sub { padding-left: 14px; border-left: 2px solid var(--faint); }
 .dur.sub[hidden] { display: none; }
 
 .dur { display: grid; gap: 10px; }
 .dur-top { display: flex; justify-content: space-between; font-weight: 600; }
-.dur-top output { font-variant-numeric: tabular-nums; color: var(--soft); font-weight: 500; }
+.dur-top output { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 700; background: var(--hover); padding: 1px 8px; border-radius: 6px; min-width: 2.6em; text-align: center; }
 
 input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; margin: 0; cursor: pointer; }
 input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(var(--ink), var(--ink)) 0 / var(--fill, 20%) 100% no-repeat, var(--faint); }
