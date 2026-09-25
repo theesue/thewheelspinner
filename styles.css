@@ -108,6 +108,20 @@
 
   /* display: contents keeps the fieldset out of the flex layout */
   #controls { display: contents; }
+
+  /* Desktop: the app is exactly one window tall and the page itself never scrolls,
+     so the side panel can't move. The wheel/reel size to the window height instead,
+     and if a very short window still can't fit them, only the wheel area scrolls. */
+  @container app (inline-size >= 860px) {
+    .app { block-size: 100dvh; min-block-size: 0; overflow: hidden; }
+    .stage { overflow: hidden auto; overscroll-behavior: contain; }
+    .side { position: relative; block-size: 100dvh; }
+  }
+}
+
+/* No elastic bounce on desktop (Mac trackpads), which also made the panel look loose */
+@media (min-width: 860px) {
+  html { overscroll-behavior: none; }
 }
 
 /* ---------- Components ---------- */
@@ -117,6 +131,9 @@
   .wheel-wrap {
     position: relative;
     inline-size: min(100%, 620px, 78dvh);
+
+    /* Desktop: fit under the result bar area (124px) with room at the bottom */
+    @container app (inline-size >= 860px) { inline-size: min(100%, 620px, calc(100dvh - 180px)); }
     aspect-ratio: 1;
     container-type: inline-size;
     user-select: none;
@@ -133,7 +150,16 @@
     &.drawn::before { display: none; }
   }
 
-  canvas {
+  /* The canvas is square and rotates; this round clip keeps its corners from
+     adding overflow (which used to widen/lengthen the page) */
+  .wheel-disc {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    overflow: hidden;
+  }
+
+  #wheel {
     position: absolute;
     inset: 0;
     inline-size: 100%;
@@ -196,6 +222,9 @@
     flex-direction: column;
     align-items: center;
     inline-size: min(100%, 560px);
+
+    /* Desktop: frame + caption + Spin button fit the window height (frame is 340/520 as tall as wide) */
+    @container app (inline-size >= 860px) { inline-size: min(100%, 560px, calc((100dvh - 300px) * 1.53)); }
     user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
