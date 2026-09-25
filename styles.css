@@ -31,6 +31,9 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 button, input { font: inherit; color: inherit; }
+/* Stop double-tap zoom on fast repeated taps (pinch-zoom still works) */
+html, body, button, canvas, .wheel-wrap { touch-action: manipulation; }
+.wheel-wrap, .hub, .result { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 /* iOS zooms into any field under 16px */
 input[type="text"] { font-size: 16px; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
