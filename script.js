@@ -31,15 +31,20 @@
     pinDialog: $('pinDialog'), pinForm: $('pinForm'), pinTitle: $('pinTitle'), pinText: $('pinText'),
     pinInput: $('pinInput'), pinError: $('pinError'), pinCancel: $('pinCancel'), pinSubmit: $('pinSubmit'),
     pinReveal: $('pinReveal'),
+    reelWrap: $('reelWrap'), reelFrame: $('reelFrame'), reel: $('reel'), reelCaption: $('reelCaption'),
+    reelSpin: $('reelSpin'), reelArrowL: $('reelArrowL'), reelArrowR: $('reelArrowR'),
+    slotAt: $('slotAt'), slotAtOut: $('slotAtOut'), slotAtRow: $('slotAtRow'),
+    viewRadios: document.querySelectorAll('input[name="view"]'),
   };
   const ctx = el.canvas.getContext('2d');
+  const rctx = el.reel.getContext('2d');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
   // ---------- State ----------
   const state = {
     items: [],              // { label, color }
     seconds: 5,
-    settings: { noRemove: false, autoRemove: false, autoDelay: 3, open: false, itemsOpen: true },
+    settings: { noRemove: false, autoRemove: false, autoDelay: 3, open: false, itemsOpen: true, view: 'auto', slotAt: 100 },
     lock: null,             // { salt, hash, iter, fails, until } while locked; never the PIN itself
   };
   let rotation = 0;         // degrees, clockwise
@@ -49,6 +54,9 @@
   let winner = -1;
   let pending = null;       // { item, timer } while an auto-remove counts down
   let wheelSize = 0;        // CSS px, kept current by the ResizeObserver
+  let view = 'wheel';       // what's showing: 'wheel' or 'slot' (Auto resolves to one of these)
+  let reelPos = 0;          // slot view: which row is centered, in rows (fractional while moving)
+  let reelSize = { w: 0, h: 0 };
 
   // ---------- Colors ----------
   function shade(hex, amt) {
@@ -104,6 +112,8 @@
         autoDelay: Math.min(10, Math.max(1, +st.autoDelay || 3)),
         open: !!st.open,
         itemsOpen: st.itemsOpen !== false, // open unless someone collapsed it
+        view: ['auto', 'wheel', 'slot'].includes(st.view) ? st.view : 'auto',
+        slotAt: Math.min(500, Math.max(20, Math.round((+st.slotAt || 100) / 10) * 10)),
       };
       const lk = s.lock;
       if (lk && typeof lk.salt === 'string' && typeof lk.hash === 'string' && lk.iter > 0) {
@@ -127,10 +137,10 @@
   // ---------- Wheel drawing ----------
   // The wheel is painted once per change, at rotation 0. Spinning only changes the
   // canvas element's CSS `rotate`, which the compositor handles without repainting.
-  function fit(text, max) {
-    if (ctx.measureText(text).width <= max) return text;
+  function fit(text, max, c = ctx) {
+    if (c.measureText(text).width <= max) return text;
     let t = text.replace(/…$/, '');
-    while (t.length > 1 && ctx.measureText(t + '…').width > max) t = t.slice(0, -1);
+    while (t.length > 1 && c.measureText(t + '…').width > max) t = t.slice(0, -1);
     return t + '…';
   }
 
@@ -174,7 +184,7 @@
   function requestDraw() {
     if (drawQueued) return;
     drawQueued = true;
-    requestAnimationFrame(() => { drawQueued = false; draw(); });
+    requestAnimationFrame(() => { drawQueued = false; redraw(); });
   }
 
   function draw() {
@@ -256,20 +266,103 @@
     }
   }
 
+  // ---------- Slot reel drawing ----------
+  // Five rows fit in the frame and the middle one is the pick. The reel is redrawn
+  // every frame while it moves, but only the ~7 rows in sight, so list size doesn't matter.
+  const mod = (a, n) => ((a % n) + n) % n;
+
+  function drawReel(speed = 0) {
+    const { w, h } = reelSize.w ? reelSize : { w: el.reelFrame.clientWidth, h: el.reelFrame.clientHeight };
+    if (!w || !h) return;
+    const dpr = Math.min(devicePixelRatio || 1, 3);
+    const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
+    if (el.reel.width !== pw || el.reel.height !== ph) { el.reel.width = pw; el.reel.height = ph; }
+    rctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    rctx.clearRect(0, 0, w, h);
+
+    const { items } = state;
+    const n = items.length;
+    rctx.textAlign = 'center';
+    rctx.textBaseline = 'middle';
+
+    if (!n) {
+      rctx.fillStyle = getComputedStyle(document.body).color;
+      rctx.globalAlpha = 0.6;
+      rctx.font = `500 ${Math.max(14, w * 0.032)}px "Schibsted Grotesk", system-ui, sans-serif`;
+      rctx.fillText('Add items to fill the reel', w / 2, h / 2);
+      rctx.globalAlpha = 1;
+      return;
+    }
+
+    const rowH = h / 5, mid = h / 2, padX = 10, gap = 4;
+    const fs = Math.max(14, Math.min(22, rowH * 0.34));
+    rctx.font = `700 ${fs}px "Schibsted Grotesk", system-ui, sans-serif`;
+    // Past a couple of rows per frame the names can't be read anyway, so fade them
+    // and let the colors streak by
+    const labelAlpha = Math.max(0, Math.min(1, 1 - (speed - 0.012) / 0.03));
+
+    for (let k = Math.floor(reelPos) - 3; k <= Math.ceil(reelPos) + 3; k++) {
+      const i = mod(k, n);
+      const item = items[i];
+      const y = mid + (k - reelPos) * rowH;
+      const alpha = winner > -1 && i !== winner ? 0.28 : 1;
+
+      rctx.globalAlpha = alpha;
+      rctx.fillStyle = item.color;
+      rctx.beginPath();
+      rctx.roundRect(padX, y - rowH / 2 + gap, w - padX * 2, rowH - gap * 2, 12);
+      rctx.fill();
+
+      if (labelAlpha > 0) {
+        rctx.globalAlpha = alpha * labelAlpha;
+        rctx.fillStyle = textOn(item.color);
+        rctx.fillText(fit(item.label, w - 96, rctx), w / 2, y);
+      }
+    }
+    rctx.globalAlpha = 1;
+  }
+
+  // Whichever view is showing
+  function redraw(speed) {
+    if (view === 'slot') drawReel(speed);
+    else draw();
+  }
+
   const applyRotation = () => { el.canvas.style.rotate = `${rotation}deg`; };
+
+  // Position in the current view's units: degrees for the wheel, rows for the reel
+  const getPos = () => (view === 'slot' ? reelPos : rotation);
+  function setPos(value, speed = 0) {
+    if (view === 'slot') { reelPos = value; drawReel(speed); }
+    else { rotation = value; applyRotation(); }
+  }
 
   function indexAtPointer() {
     const n = state.items.length;
     if (!n) return -1;
-    const p = ((-rotation % 360) + 360) % 360;
+    if (view === 'slot') return mod(Math.round(reelPos), n);
+    const p = mod(-rotation, 360);
     return Math.floor(p / (360 / n)) % n;
+  }
+
+  // Auto picks the reel once the list is longer than the chosen size
+  function resolveView() {
+    const { view: v, slotAt } = state.settings;
+    return v === 'auto' ? (state.items.length > slotAt ? 'slot' : 'wheel') : v;
+  }
+  function updateView() {
+    const next = resolveView();
+    document.documentElement.dataset.view = next;
+    if (next === view) return false;
+    view = next;
+    return true;
   }
 
   // ---------- Spinning ----------
   // Ease-out cubic: angle = from + D(1-(1-t)^3), so the starting speed is 3D/T.
   // A tap mid-spin reads the current speed, adds a boost, and restarts the ease from there.
   function motionAt(now) {
-    if (!anim) return { angle: rotation, speed: 0, done: true };
+    if (!anim) return { angle: getPos(), speed: 0, done: true };
     const t = Math.min((now - anim.t0) / anim.T, 1);
     return {
       angle: anim.from + anim.D * (1 - (1 - t) ** 3),
@@ -284,35 +377,53 @@
 
     const now = performance.now();
     const m = motionAt(now);
-    rotation = m.angle;
-    const v0 = Math.min(m.speed + 1 + Math.random() * 0.7, 7); // deg per ms
-    const T = state.seconds * 1000;
-    anim = { t0: now, from: rotation, D: (v0 * T) / 3, T };
+    setPos(m.angle);
+    // Reduced motion: keep it short
+    const T = (reducedMotion.matches ? Math.min(state.seconds, 1.5) : state.seconds) * 1000;
 
-    if (winner > -1) { winner = -1; draw(); }
+    // How far to travel. The random part spans exactly one full turn (or one pass
+    // through the list), so every item is equally likely. `carry` keeps momentum
+    // from a spin that's already going, so tapping again speeds it up.
+    const carry = m.speed * T / 3;
+    let D;
+    if (view === 'slot') {
+      const n = state.items.length;
+      D = Math.min(carry, 4 * n + 120) + 30 + Math.random() * n;
+      D = Math.round(m.angle + D) - m.angle; // stop dead-center on a row
+    } else {
+      const base = 1.25 * T / 3;              // about 1.25°/ms at the start
+      const cap = Math.max(0, 7 * T / 3 - base - 360); // top speed stays under 7°/ms
+      D = Math.min(carry, cap) + base + Math.random() * 360;
+    }
+    anim = { t0: now, from: m.angle, D, T };
+
+    if (winner > -1) { winner = -1; redraw(); }
     hideResult();
     setControlsState();
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(frame);
   }
 
-  let tickAnim = null;
-  function tick() {
-    if (reducedMotion.matches) return;
-    tickAnim?.cancel();
-    tickAnim = el.pointer.animate(
-      [{ rotate: '-18deg' }, { rotate: '0deg' }],
-      { duration: 120, easing: 'ease-out' },
-    );
+  // Pointer flick each time an item passes. Throttled, since the reel can pass
+  // dozens of rows a second and that would just be a buzz.
+  let tickAnims = [];
+  let lastTick = 0;
+  function tick(now) {
+    if (reducedMotion.matches || now - lastTick < 45) return;
+    lastTick = now;
+    tickAnims.forEach(a => a.cancel());
+    const opts = { duration: 120, easing: 'ease-out' };
+    tickAnims = view === 'slot'
+      ? [el.reelArrowL, el.reelArrowR].map(a => a.animate([{ scale: '1.4' }, { scale: '1' }], opts))
+      : [el.pointer.animate([{ rotate: '-18deg' }, { rotate: '0deg' }], opts)];
   }
 
   function frame(now) {
     const m = motionAt(now);
-    rotation = m.angle;
-    applyRotation();
+    setPos(m.angle, m.speed);
 
     const idx = indexAtPointer();
-    if (idx !== lastIndex) { lastIndex = idx; tick(); }
+    if (idx !== lastIndex) { lastIndex = idx; tick(now); }
 
     if (m.done) finish();
     else raf = requestAnimationFrame(frame);
@@ -320,14 +431,14 @@
 
   function finish() {
     anim = null;
-    rotation = ((rotation % 360) + 360) % 360;
-    applyRotation();
+    if (view === 'slot') reelPos = mod(Math.round(reelPos), state.items.length || 1);
+    else { rotation = mod(rotation, 360); applyRotation(); }
     setControlsState();
 
     winner = indexAtPointer();
     const item = state.items[winner];
     if (!item) return;
-    draw();
+    redraw();
 
     const { autoRemove, autoDelay } = state.settings;
     el.resDot.style.background = item.color;
@@ -364,8 +475,10 @@
     if (pending) { clearTimeout(pending.timer); pending = null; }
     el.countdown.classList.remove('run');
     el.result.hidden = true;
+    updateView();
     const n = state.items.length;
-    rotation = n ? -(360 / n) / 2 : 0;
+    rotation = n ? -(360 / n) / 2 : 0; // wheel: first slice centered under the pointer
+    reelPos = 0;                        // reel: first row in the window
     winner = -1;
     lastIndex = indexAtPointer();
     applyRotation();
@@ -389,7 +502,10 @@
     });
     el.list.replaceChildren(frag);
     el.count.textContent = items.length === 1 ? '1 item' : `${items.length} items`;
-    el.spinBtn.disabled = !items.length;
+    el.spinBtn.disabled = el.reelSpin.disabled = !items.length;
+    el.reelCaption.textContent = items.length > 1
+      ? `Every one of the ${items.length.toLocaleString()} items has the same chance.`
+      : '';
   }
 
   function commit() {
@@ -477,6 +593,8 @@
 
   el.canvas.addEventListener('click', spin);
   el.spinBtn.addEventListener('click', spin);
+  el.reel.addEventListener('click', spin);
+  el.reelSpin.addEventListener('click', spin);
 
   // ---------- Settings ----------
   const fillRange = r => r.style.setProperty('--fill', `${((r.value - r.min) / (r.max - r.min)) * 100}%`);
@@ -494,7 +612,30 @@
     el.autoDelayRow.hidden = !s.autoRemove;
     el.settings.open = s.open;
     setItemsOpen(s.itemsOpen);
+    el.viewRadios.forEach(r => { r.checked = r.value === s.view; });
+    el.slotAt.value = s.slotAt;
+    el.slotAtOut.value = `${s.slotAt} items`;
+    fillRange(el.slotAt);
+    el.slotAtRow.hidden = s.view !== 'auto';
   }
+
+  // View: switching resets the wheel/reel to its start, like any other change
+  function viewChanged() {
+    save();
+    if (resolveView() !== view) resetWheel();
+  }
+  el.viewRadios.forEach(r => r.addEventListener('change', () => {
+    if (!r.checked) return;
+    state.settings.view = r.value;
+    el.slotAtRow.hidden = r.value !== 'auto';
+    viewChanged();
+  }));
+  el.slotAt.addEventListener('input', () => {
+    state.settings.slotAt = +el.slotAt.value;
+    el.slotAtOut.value = `${state.settings.slotAt} items`;
+    fillRange(el.slotAt);
+    viewChanged();
+  });
 
   el.spinTime.addEventListener('input', () => {
     state.seconds = +el.spinTime.value;
@@ -848,7 +989,7 @@
   render();
   resetWheel();
   applyLock();
-  draw(); // now, not next frame, so the first paint already has the real wheel
+  redraw(); // now, not next frame, so the first paint already has the real wheel/reel
 
   // Transitions stay off until the restored state has painted (see styles.css)
   requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -862,6 +1003,15 @@
     labelCache.clear();
     draw();
   }).observe(el.wrap);
+
+  new ResizeObserver(([entry]) => {
+    const box = entry.contentBoxSize?.[0];
+    const w = box?.inlineSize ?? entry.contentRect.width;
+    const h = box?.blockSize ?? entry.contentRect.height;
+    if (w === reelSize.w && h === reelSize.h) return;
+    reelSize = { w, h };
+    if (view === 'slot') drawReel();
+  }).observe(el.reelFrame);
 
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', requestDraw);
   document.fonts?.ready.then(() => { labelCache.clear(); requestDraw(); });

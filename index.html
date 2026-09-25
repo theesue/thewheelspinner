@@ -13,13 +13,18 @@
 <link rel="preload" href="fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
 <script>
-  // Paint the saved wheel colors before anything else loads, so a refresh never
-  // shows an empty wheel while script.js starts up. script.js draws the real wheel on top.
+  // Before anything else loads: pick the view (wheel or slot reel) so the right one
+  // shows on first paint, and paint the saved wheel colors so a refresh never shows
+  // an empty wheel while script.js starts up. script.js draws the real thing on top.
   (function () {
     try {
       var saved = JSON.parse(localStorage.getItem('spinwheel:v1') || 'null');
       var items = (saved && saved.items || []).filter(function (x) { return /^#[0-9a-f]{6}$/i.test(x && x.color); });
-      if (!items.length) return;
+      var st = saved && saved.settings || {};
+      var slotAt = +st.slotAt || 100;
+      var view = st.view === 'wheel' || st.view === 'slot' ? st.view : (items.length > slotAt ? 'slot' : 'wheel');
+      document.documentElement.dataset.view = view;
+      if (view === 'slot' || !items.length) return;
       var a = 360 / items.length, stops = [];
       for (var i = 0; i < items.length; i++) stops.push(items[i].color + ' ' + i * a + 'deg ' + (i + 1) * a + 'deg');
       document.documentElement.style.setProperty('--wheel-bg', 'conic-gradient(from ' + -a / 2 + 'deg, ' + stops.join(', ') + ')');
@@ -37,6 +42,19 @@
       </svg>
       <canvas id="wheel" aria-hidden="true"></canvas>
       <button class="hub" id="spinBtn" type="button" disabled>Spin</button>
+    </div>
+
+    <!-- Slot view: a vertical reel for long lists. Only the rows in sight are drawn. -->
+    <div class="reel-wrap" id="reelWrap">
+      <div class="reel-frame" id="reelFrame">
+        <canvas id="reel" aria-hidden="true"></canvas>
+        <div class="reel-window" aria-hidden="true">
+          <svg class="reel-arrow left" id="reelArrowL" width="12" height="18" viewBox="0 0 12 18"><path d="M1 1.5 L10.5 9 L1 16.5 Z" fill="var(--ink)" stroke="var(--ink)" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <svg class="reel-arrow right" id="reelArrowR" width="12" height="18" viewBox="0 0 12 18"><path d="M11 1.5 L1.5 9 L11 16.5 Z" fill="var(--ink)" stroke="var(--ink)" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+      <p class="reel-caption" id="reelCaption"></p>
+      <button class="reel-spin" id="reelSpin" type="button" disabled>Spin</button>
     </div>
 
     <div class="result" id="result" role="status" aria-live="polite" hidden>
@@ -84,6 +102,20 @@
             <div class="range">
               <div class="range-top"><label for="spinTime">Spin time</label><output id="spinTimeOut" for="spinTime">5s</output></div>
               <input type="range" id="spinTime" min="1" max="20" step="1" value="5">
+            </div>
+
+            <div class="view-setting">
+              <span class="setting-label" id="viewLabel">View</span>
+              <div class="segmented" role="radiogroup" aria-labelledby="viewLabel">
+                <label><input type="radio" name="view" value="auto" checked><span>Auto</span></label>
+                <label><input type="radio" name="view" value="wheel"><span>Wheel</span></label>
+                <label><input type="radio" name="view" value="slot"><span>Slot</span></label>
+              </div>
+            </div>
+
+            <div class="range sub" id="slotAtRow">
+              <div class="range-top"><label for="slotAt">Slot view above</label><output id="slotAtOut" for="slotAt">100 items</output></div>
+              <input type="range" id="slotAt" min="20" max="500" step="10" value="100">
             </div>
 
             <label class="toggle">

@@ -14,6 +14,7 @@ A simple spin-the-wheel you can use to pick names, decide where to eat, choose w
 The Settings menu has a few options:
 
 - **Spin time** is how long the wheel spins, from 1 to 20 seconds.
+- **View** switches between the wheel and a slot-machine style reel. On Auto (the default) it uses the wheel for short lists and flips to the reel once you have more than 100 items, since the wheel's labels get too small to read. You can change that number, or just pick Wheel or Slot to always use one. Either way every item has the same chance.
 - **Disable remove item** hides the Remove button on the picked item, if you don't want people taking things off the wheel.
 - **Remove on select** takes the picked item off the wheel on its own after a few seconds. Handy for drawing names one at a time. You can set how long it stays up with the Show for slider.
 
