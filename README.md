@@ -1,6 +1,6 @@
 # Spin the Wheel
 
-A simple spin-the-wheel you can use to pick names, decide where to eat, choose who goes first, whatever you need. It's plain HTML, CSS and JavaScript. No framework, no sign-up, and everything you add stays in your browser.
+A simple, no ADs, spin-the-wheel for whatever you need. It's plain HTML, CSS and JavaScript. No framework, no sign-up, and everything you add stays in your browser.
 
 ## What it does
 
