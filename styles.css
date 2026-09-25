@@ -41,7 +41,9 @@
 }
 
 @layer base {
-  html { block-size: 100%; -webkit-text-size-adjust: 100%; }
+  /* The body is a size container, which stops its background from filling the
+     whole viewport, so the page color goes on <html> too */
+  html { block-size: 100%; -webkit-text-size-adjust: 100%; background: var(--page); }
   body {
     min-block-size: 100dvh;
     padding-block: env(safe-area-inset-top, 0) env(safe-area-inset-bottom, 0);
@@ -68,7 +70,8 @@
     min-block-size: 100dvh;
 
     @container app (inline-size < 860px) {
-      grid-template-columns: 1fr;
+      /* minmax(0, …) so content can never make the column wider than the screen */
+      grid-template-columns: minmax(0, 1fr);
       min-block-size: 0;
     }
   }
@@ -78,6 +81,9 @@
     display: grid;
     place-items: center;
     padding: 124px 24px 40px;
+    /* The rotated canvas's (transparent) corners poke past the edges; don't let
+       them widen the page. `clip` doesn't create a scroll container. */
+    overflow: clip;
   }
 
   .side {
@@ -234,6 +240,29 @@
   }
 
   @keyframes drain { from { scale: 1 1; } to { scale: 0 1; } }
+
+  /* Phones: the result sits under the wheel instead of crowding the pointer,
+     close to where your thumb is for Done / Remove */
+  @container app (inline-size < 860px) {
+    .stage { padding: 52px 16px 100px; }
+
+    /* Pinned to both sides and centered with auto margins, so a long name can
+       use the full width instead of half of it */
+    .result {
+      inset: auto 12px 28px;
+      inline-size: fit-content;
+      max-inline-size: calc(100% - 24px);
+      margin-inline: auto;
+      translate: 0 0;
+      gap: 10px;
+      padding: 8px 8px 8px 14px;
+
+      button { padding: 7px 10px; }
+
+      @starting-style { opacity: 0; translate: 0 16px; }
+      &[hidden] { translate: 0 16px; }
+    }
+  }
 
   /* Sidebar */
   .side-head {
