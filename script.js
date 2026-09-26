@@ -51,6 +51,7 @@
     shareLink: $('shareLink'), shareCopy: $('shareCopy'), shareNative: $('shareNative'),
     openDialog: $('openDialog'), openText: $('openText'), openPreview: $('openPreview'),
     openAdd: $('openAdd'), openReplace: $('openReplace'), openUnlock: $('openUnlock'),
+    linkErrorDialog: $('linkErrorDialog'), linkErrorTitle: $('linkErrorTitle'), linkErrorText: $('linkErrorText'),
   };
   const ctx = el.canvas.getContext('2d');
   const rctx = el.reel.getContext('2d');
@@ -629,7 +630,7 @@
   });
   el.resClose.addEventListener('click', hideResult);
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && !el.clearDialog.open && !el.pinDialog.open) hideResult();
+    if (e.key === 'Escape' && !document.querySelector('dialog[open]')) hideResult();
   });
 
   el.canvas.addEventListener('click', spin);
@@ -931,7 +932,8 @@
     // Exact shape only: {v: 1, i: [...]}. Nothing else is read from it.
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('bad shape');
     if (data.v !== 1 || !Array.isArray(data.i)) throw new Error('bad shape');
-    if (data.i.length === 0 || data.i.length > MAX_SHARE) throw new Error('bad count');
+    if (data.i.length > MAX_SHARE) throw new Error('too many');
+    if (data.i.length === 0) throw new Error('empty');
     const items = [];
     for (const entry of data.i) {
       if (!Array.isArray(entry) || typeof entry[0] !== 'string') throw new Error('bad item');
@@ -951,15 +953,34 @@
 
   let pendingShare = null; // decoded items waiting for Replace / Add / Cancel
 
+  // Anything starting with "#w" is treated as a share link, so a slightly mangled
+  // one ("#w-", "#W=", "#w=2.") gets a clear error instead of being silently ignored.
+  const looksLikeShare = hash => /^#w/i.test(hash);
+
+  const LINK_ERRORS = {
+    'too many': ['Too many items in this link',
+      `Share links can hold up to ${MAX_SHARE} items, and this one has more, so nothing was loaded. Your wheel hasn’t changed. Ask the person who sent it to share a CSV file instead.`],
+    unsupported: ['Your browser can’t open this link',
+      'This share link needs a newer browser to open, so nothing was loaded. Your wheel hasn’t changed. Updating your browser should fix it.'],
+    generic: ['This link didn’t work',
+      'This share link is broken or incomplete, so nothing was loaded. Your wheel hasn’t changed. Ask for the link again and make sure all of it gets copied; some apps cut long links short.'],
+  };
+  function showLinkError(reason) {
+    const [title, text] = LINK_ERRORS[reason] ?? LINK_ERRORS.generic;
+    el.linkErrorTitle.textContent = title;
+    el.linkErrorText.textContent = text;
+    if (!el.linkErrorDialog.open) el.linkErrorDialog.showModal();
+  }
+
   async function handleShareLink() {
-    if (!location.hash.startsWith('#w=')) return;
+    if (!looksLikeShare(location.hash)) return;
     const hash = location.hash;
     clearShareHash();
     try {
       pendingShare = await decodeShare(hash);
-    } catch {
+    } catch (err) {
       pendingShare = null;
-      toast('That share link is broken or not valid, so nothing was loaded.', 5000);
+      showLinkError(err?.message);
       return;
     }
     showOpenDialog();

@@ -205,6 +205,17 @@
   </form>
 </dialog>
 
+<!-- A share link that couldn't be read. A dialog, not a toast, so it isn't missed. -->
+<dialog class="confirm" id="linkErrorDialog" closedby="any">
+  <form method="dialog">
+    <h2 id="linkErrorTitle">This link didn’t work</h2>
+    <p id="linkErrorText"></p>
+    <div class="confirm-actions">
+      <button class="tool solid" value="ok" autofocus>OK</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog class="confirm pin-dialog" id="pinDialog" closedby="any">
   <form id="pinForm" autocomplete="off" novalidate>
     <h2 id="pinTitle">Lock the wheel</h2>
