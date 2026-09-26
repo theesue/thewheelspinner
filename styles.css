@@ -46,7 +46,8 @@
   html { block-size: 100%; -webkit-text-size-adjust: 100%; background: var(--page); }
   body {
     min-block-size: 100dvh;
-    padding-block: env(safe-area-inset-top, 0) env(safe-area-inset-bottom, 0);
+    /* Safe areas (notch, home indicator) are padded inside the pieces that touch
+       the screen edges, not here: padding the body made it taller than the screen */
     background: var(--page);
     color: var(--ink);
     font: 15px/1.45 "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -75,7 +76,7 @@
     @container app (inline-size < 860px) {
       /* minmax(0, …) so content can never make the column wider than the screen */
       grid-template-columns: minmax(0, 1fr);
-      min-block-size: 0;
+      grid-template-rows: auto 1fr; /* the panel fills whatever height is left */
     }
   }
 
@@ -83,7 +84,7 @@
     position: relative;
     display: grid;
     place-items: center;
-    padding: 124px 24px 40px;
+    padding: 124px 24px calc(40px + env(safe-area-inset-bottom, 0px));
     /* The rotated canvas's (transparent) corners poke past the edges; don't let
        them widen the page. `clip` doesn't create a scroll container. */
     overflow: clip;
@@ -361,7 +362,7 @@
   /* Phones: the result sits under the wheel instead of crowding the pointer,
      close to where your thumb is for Done / Remove */
   @container app (inline-size < 860px) {
-    .stage { padding: 52px 16px 100px; }
+    .stage { padding: calc(52px + env(safe-area-inset-top, 0px)) 16px 100px; }
 
     /* Pinned to both sides and centered with auto margins, so a long name can
        use the full width instead of half of it */
@@ -387,8 +388,10 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 14px 14px 6px;
+    padding: 14px calc(14px + env(safe-area-inset-right, 0px)) 6px 14px;
     h1 { flex: 1; min-inline-size: 0; font: inherit; }
+
+    @container app (inline-size >= 860px) { padding-block-start: calc(14px + env(safe-area-inset-top, 0px)); }
   }
 
   /* PIN lock toggle: open padlock when unlocked, filled one when locked */
@@ -531,7 +534,7 @@
   .foot {
     display: grid;
     gap: 18px;
-    padding: 18px 22px 22px;
+    padding: 18px calc(22px + env(safe-area-inset-right, 0px)) calc(22px + env(safe-area-inset-bottom, 0px)) 22px;
     border-block-start: 1px solid var(--faint);
   }
 
