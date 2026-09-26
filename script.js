@@ -8,6 +8,18 @@
   const MAX_IMPORT = 1000;   // most items one CSV can add
   const BIG_CSV = 100;       // more lines than this gets a readability heads-up
   const PAPA_SRC = 'vendor/papaparse.min.js?v=5.7.0';
+  const SW_SRC = 'sw.js';
+
+  // Trusted Types (enforced by the CSP in Chromium browsers): script URLs can only be
+  // created through this policy, and it allows exactly two, both our own files.
+  // Anything else, from anywhere, is refused.
+  const ttPolicy = globalThis.trustedTypes?.createPolicy('wheel', {
+    createScriptURL(url) {
+      if (url === PAPA_SRC || url === SW_SRC) return url;
+      throw new TypeError(`Blocked script URL: ${url}`);
+    },
+  });
+  const scriptURL = url => (ttPolicy ? ttPolicy.createScriptURL(url) : url);
 
   // Hand-picked palette; repeats get a lighter/darker shift so neighbours stay distinct
   const PALETTE = ['#ff5a36', '#ffb000', '#1fb58f', '#3d5afe', '#9b5de5', '#f0508c',
@@ -35,6 +47,10 @@
     reelSpin: $('reelSpin'), reelArrowL: $('reelArrowL'), reelArrowR: $('reelArrowR'),
     slotAt: $('slotAt'), slotAtOut: $('slotAtOut'), slotAtRow: $('slotAtRow'),
     viewRadios: document.querySelectorAll('input[name="view"]'),
+    shareBtn: $('shareBtn'), exportBtn: $('exportBtn'), shareDialog: $('shareDialog'), shareText: $('shareText'),
+    shareLink: $('shareLink'), shareCopy: $('shareCopy'), shareNative: $('shareNative'),
+    openDialog: $('openDialog'), openText: $('openText'), openPreview: $('openPreview'),
+    openAdd: $('openAdd'), openReplace: $('openReplace'), openUnlock: $('openUnlock'),
   };
   const ctx = el.canvas.getContext('2d');
   const rctx = el.reel.getContext('2d');
@@ -92,7 +108,25 @@
     textColorCache.set(hex, v);
     return v;
   }
-  const cleanLabel = s => String(s ?? '').replace(/﻿/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_LABEL);
+  // ---------- Sanitizing ----------
+  // Every label from anywhere (typing, list edits, CSV, saved data, share links) goes
+  // through here. Labels are only ever shown as plain text (textContent, input values,
+  // canvas fillText), never as HTML, so this is about keeping them clean and honest:
+  //  - control characters (tabs, newlines, NUL, C1) become spaces
+  //  - invisible/format characters are removed: zero-width spaces, BOMs, and the
+  //    bidi overrides that can make text display differently than it reads
+  //  - Unicode is normalized, whitespace collapsed, and length capped by characters
+  //    (not UTF-16 units, so emoji are never cut in half)
+  const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/g;
+  const FORMAT_CHARS = /[­᠎​‌‎‏‪-‮⁠-⁤⁦-⁩﻿￹-￻]/g;
+  function stripUnsafe(s) {
+    return String(s ?? '').normalize('NFC').replace(CONTROL_CHARS, ' ').replace(FORMAT_CHARS, '');
+  }
+  function capChars(s, max) {
+    const chars = Array.from(s);
+    return chars.length > max ? chars.slice(0, max).join('') : s;
+  }
+  const cleanLabel = s => capChars(stripUnsafe(s).replace(/\s+/g, ' ').trim(), MAX_LABEL).trim();
 
   // ---------- Storage (debounced so typing doesn't hit localStorage per key) ----------
   function load() {
@@ -102,7 +136,8 @@
       if (Array.isArray(s.items)) {
         state.items = s.items
           .filter(x => x && typeof x.label === 'string' && normalizeHex(x.color))
-          .map(x => ({ label: x.label.slice(0, MAX_LABEL), color: normalizeHex(x.color) }));
+          .map(x => ({ label: cleanLabel(x.label), color: normalizeHex(x.color) }))
+          .filter(x => x.label);
       }
       state.seconds = Math.min(20, Math.max(1, +s.seconds || 5));
       const st = s.settings ?? {};
@@ -531,17 +566,23 @@
     const item = state.items[i];
     if (!item) return;
     if (e.target.dataset.field === 'color') {
-      item.color = e.target.value;
+      item.color = normalizeHex(e.target.value) ?? item.color;
     } else {
-      item.label = e.target.value;
+      // Drop unsafe characters as they're typed; trimming waits for blur
+      const typed = capChars(stripUnsafe(e.target.value), MAX_LABEL);
+      if (typed !== e.target.value) e.target.value = typed;
+      item.label = typed;
       e.target.nextElementSibling.ariaLabel = `Remove ${item.label || 'item'}`;
     }
     save();
     resetWheel();
   });
   el.list.addEventListener('focusout', e => {
-    if (e.target.dataset.field !== 'label' || e.target.value.trim()) return;
-    removeItem(rowIndex(e.target));
+    if (e.target.dataset.field !== 'label') return;
+    const i = rowIndex(e.target);
+    const clean = cleanLabel(e.target.value);
+    if (!clean) { removeItem(i); return; }
+    if (clean !== e.target.value) { e.target.value = clean; state.items[i].label = clean; save(); requestDraw(); }
   });
   el.list.addEventListener('keydown', e => {
     if (e.key === 'Enter' && e.target.dataset.field === 'label') {
@@ -703,7 +744,7 @@
     if (window.Papa) return Promise.resolve(window.Papa);
     return (papaPromise ??= new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = PAPA_SRC;
+      s.src = scriptURL(PAPA_SRC);
       s.async = true;
       s.onload = () => resolve(window.Papa);
       s.onerror = () => { papaPromise = null; s.remove(); reject(new Error('parser')); };
@@ -717,7 +758,9 @@
   // Accepts: a header row with an item/name column (plus an optional color column),
   // one item per line, "label,#hex" pairs, or several items on one line.
   function extractItems(rows) {
-    const cells = rows.map(r => r.map(cleanLabel));
+    // Exported CSVs put a ' in front of names starting with = + - @ so spreadsheets
+    // don't treat them as formulas (see exportCsv); take it back off here
+    const cells = rows.map(r => (Array.isArray(r) ? r : []).map(c => cleanLabel(String(c ?? '').replace(/^'(?=[=+\-@])/, ''))));
     const out = [];
     const nameCol = cells[0]?.findIndex(c => NAME_HEADER.test(c)) ?? -1;
 
@@ -815,6 +858,249 @@
   addEventListener('dragover', e => hasFiles(e) && e.preventDefault());
   addEventListener('drop', e => hasFiles(e) && e.preventDefault());
 
+
+  // ---------- Share links ----------
+  // The list travels inside the link, after the #. That part of a URL is never sent
+  // to any server, so nothing is stored anywhere but the link itself.
+  //
+  //   https://suevang.dev/#w=1.<base64url>      1 = deflate-compressed JSON, 0 = plain JSON
+  //   JSON: {"v":1,"i":[["Label","rrggbb"], ...]}  (color optional)
+  //
+  // A link is untrusted input from a stranger. It can only ever become a list of
+  // plain-text labels and hex colors: nothing in it is run, navigated to, used as a
+  // URL or inserted as HTML, and every step below has a hard size limit.
+  const MAX_SHARE = 200;             // items per link
+  const MAX_LINK_CHARS = 16_000;     // encoded payload, checked before decoding anything
+  const MAX_JSON_BYTES = 64 * 1024;  // after decompression (stops "zip bombs")
+  const SHARE_RE = /^#w=([01])\.([A-Za-z0-9_-]+)$/;
+  const canCompress = typeof CompressionStream === 'function' && typeof DecompressionStream === 'function';
+
+  function toBase64Url(bytes) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function fromBase64Url(str) {
+    const b64 = str.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((str.length + 3) % 4);
+    return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  }
+  async function deflate(text) {
+    const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  // Inflate with a hard output limit: stop reading the moment it's too big
+  async function inflateLimited(bytes, limit) {
+    const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > limit) { await reader.cancel(); throw new Error('too large'); }
+      chunks.push(value);
+    }
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const c of chunks) { out.set(c, at); at += c.length; }
+    return out;
+  }
+  const utf8 = bytes => new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+
+  async function encodeShare(items) {
+    const json = JSON.stringify({ v: 1, i: items.map(it => [it.label, it.color.slice(1)]) });
+    if (canCompress) return `1.${toBase64Url(await deflate(json))}`;
+    return `0.${toBase64Url(new TextEncoder().encode(json))}`;
+  }
+
+  // Returns [{label, color}] or throws. Anything unexpected is a rejection, not a guess.
+  async function decodeShare(hash) {
+    if (hash.length > MAX_LINK_CHARS + 8) throw new Error('too long');
+    const m = SHARE_RE.exec(hash);
+    if (!m) throw new Error('bad format');
+    const bytes = fromBase64Url(m[2]);
+    let text;
+    if (m[1] === '1') {
+      if (!canCompress) throw new Error('unsupported');
+      text = utf8(await inflateLimited(bytes, MAX_JSON_BYTES));
+    } else {
+      if (bytes.length > MAX_JSON_BYTES) throw new Error('too large');
+      text = utf8(bytes);
+    }
+    const data = JSON.parse(text);
+    // Exact shape only: {v: 1, i: [...]}. Nothing else is read from it.
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('bad shape');
+    if (data.v !== 1 || !Array.isArray(data.i)) throw new Error('bad shape');
+    if (data.i.length === 0 || data.i.length > MAX_SHARE) throw new Error('bad count');
+    const items = [];
+    for (const entry of data.i) {
+      if (!Array.isArray(entry) || typeof entry[0] !== 'string') throw new Error('bad item');
+      const label = cleanLabel(entry[0]);
+      const hex = typeof entry[1] === 'string' && /^[0-9a-f]{6}$/i.test(entry[1]) ? `#${entry[1].toLowerCase()}` : null;
+      if (label) items.push({ label, color: hex });
+    }
+    if (!items.length) throw new Error('empty');
+    return items;
+  }
+
+  // Take the #w=... off the address so a reload or bookmark doesn't re-open it.
+  // Same page, same URL minus the fragment: never a navigation.
+  function clearShareHash() {
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  }
+
+  let pendingShare = null; // decoded items waiting for Replace / Add / Cancel
+
+  async function handleShareLink() {
+    if (!location.hash.startsWith('#w=')) return;
+    const hash = location.hash;
+    clearShareHash();
+    try {
+      pendingShare = await decodeShare(hash);
+    } catch {
+      pendingShare = null;
+      toast('That share link is broken or not valid, so nothing was loaded.', 5000);
+      return;
+    }
+    showOpenDialog();
+  }
+
+  function showOpenDialog() {
+    if (!pendingShare) return;
+    const items = pendingShare;
+    const n = items.length;
+    const locked = !!state.lock;
+    const mine = state.items.length;
+
+    // Preview: built from text nodes only
+    const frag = document.createDocumentFragment();
+    items.slice(0, 6).forEach((it, i) => {
+      const li = document.createElement('li');
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.background = it.color ?? autoColor(mine + i);
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = it.label;
+      li.append(dot, name);
+      frag.append(li);
+    });
+    if (n > 6) {
+      const more = document.createElement('li');
+      more.className = 'more';
+      more.textContent = `and ${n - 6} more`;
+      frag.append(more);
+    }
+    el.openPreview.replaceChildren(frag);
+
+    const noun = n === 1 ? 'item' : 'items';
+    if (locked) {
+      el.openText.textContent = `This link has ${n} ${noun}. Your wheel is locked, so unlock it first to load them.`;
+    } else if (mine) {
+      el.openText.textContent = `This link has ${n} ${noun}. You have ${mine} on your wheel now.`;
+    } else {
+      el.openText.textContent = `This link has ${n} ${noun}.`;
+    }
+    el.openAdd.hidden = locked || !mine;
+    el.openReplace.hidden = locked;
+    el.openReplace.textContent = mine ? 'Replace my list' : 'Load items';
+    el.openUnlock.hidden = !locked;
+    el.openDialog.returnValue = '';
+    if (!el.openDialog.open) el.openDialog.showModal();
+  }
+
+  el.openUnlock.addEventListener('click', () => {
+    el.openDialog.close('unlock'); // keep pendingShare; unlocking reopens this
+    el.lockBtn.click();
+  });
+
+  el.openDialog.addEventListener('close', () => {
+    const choice = el.openDialog.returnValue;
+    if (choice === 'unlock') return;
+    const items = pendingShare;
+    pendingShare = null;
+    if (!items || state.lock || (choice !== 'replace' && choice !== 'add')) return;
+    if (choice === 'replace') state.items = [];
+    for (const it of items) state.items.push({ label: it.label, color: it.color ?? nextColor() });
+    commit();
+    if (!state.settings.itemsOpen) setItemsOpen(true);
+    const what = `${items.length} shared ${items.length === 1 ? 'item' : 'items'}`;
+    toast(choice === 'replace' ? `Loaded ${what}.` : `Added ${what}.`);
+  });
+
+  // A shared link pasted into this same tab
+  addEventListener('hashchange', () => { if (!anim) handleShareLink(); });
+
+  // Making a link
+  el.shareBtn.addEventListener('click', async () => {
+    const n = state.items.length;
+    if (!n) { toast('Add some items before sharing.'); return; }
+    if (n > MAX_SHARE) {
+      toast(`Share links hold up to ${MAX_SHARE} items and this wheel has ${n}. Use Export CSV instead.`, 6000);
+      return;
+    }
+    let url;
+    try {
+      url = `${location.href.split('#')[0]}#w=${await encodeShare(state.items)}`;
+    } catch {
+      toast('Couldn’t make a link on this browser. Use Export CSV instead.');
+      return;
+    }
+    el.shareText.textContent = `Anyone with this link can open a copy of these ${n} ${n === 1 ? 'item' : 'items'}. `
+      + 'Changes you make later won’t update it. Your PIN and settings aren’t included.';
+    el.shareLink.value = url;
+    el.shareNative.hidden = typeof navigator.share !== 'function';
+    el.shareDialog.showModal();
+    el.shareLink.focus();
+    el.shareLink.select();
+  });
+
+  el.shareCopy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(el.shareLink.value);
+      el.shareDialog.close();
+      toast('Link copied.');
+    } catch {
+      el.shareLink.focus();
+      el.shareLink.select();
+      toast('Couldn’t copy automatically. The link is selected, so copy it from there.', 5000);
+    }
+  });
+
+  el.shareNative.addEventListener('click', async () => {
+    try {
+      await navigator.share({ title: 'Spin the Wheel', url: el.shareLink.value });
+      el.shareDialog.close();
+    } catch { /* they closed the share sheet */ }
+  });
+
+  // ---------- Export CSV ----------
+  // Same "Name,Color" layout the importer understands, so an export re-imports as-is.
+  // Names starting with = + - @ get a leading ' so spreadsheet apps show them as text
+  // instead of running them as formulas (CSV injection); the importer strips it back off.
+  function csvCell(value) {
+    let v = String(value);
+    if (/^[=+\-@\t\r]/.test(v)) v = `'${v}`;
+    return /[",\r\n]/.test(v) || v !== v.trim() ? `"${v.replace(/"/g, '""')}"` : v;
+  }
+  function exportCsv() {
+    if (!state.items.length) { toast('There’s nothing to export yet.'); return; }
+    const lines = ['Name,Color', ...state.items.map(it => `${csvCell(it.label)},${it.color}`)];
+    const blob = new Blob(['﻿' + lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const d = new Date(); // local date, not UTC
+    const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    a.download = `wheel-items-${ymd}.csv`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast(`Exported ${state.items.length} ${state.items.length === 1 ? 'item' : 'items'}.`);
+  }
+  el.exportBtn.addEventListener('click', exportCsv);
+
   // ---------- What can be used right now ----------
   // Controls are off while spinning or locked. The GitHub link only goes inert
   // mid-spin; the lock button stays reachable so the wheel can be unlocked.
@@ -824,6 +1110,7 @@
     el.side.classList.toggle('spinning', spinning);
     el.repoLink.inert = spinning;
     el.lockBtn.disabled = spinning;
+    el.shareBtn.disabled = el.exportBtn.disabled = spinning;
   }
 
   // ---------- PIN lock ----------
@@ -918,6 +1205,11 @@
     el.pinInput.value = '';
     el.pinError.textContent = '';
     setPinRevealed(false);
+    // Backed out of unlocking to load a shared list: drop it rather than keep it waiting
+    if (state.lock && pendingShare) {
+      pendingShare = null;
+      toast('The shared list wasn’t loaded.');
+    }
   });
 
   // Digits only; nothing is submitted until Enter or the button
@@ -964,6 +1256,7 @@
         el.pinDialog.close();
         applyLock();
         toast('Unlocked.');
+        if (pendingShare) showOpenDialog(); // they unlocked to load a shared list
         return;
       }
       lock.fails += 1;
@@ -990,6 +1283,7 @@
   resetWheel();
   applyLock();
   redraw(); // now, not next frame, so the first paint already has the real wheel/reel
+  handleShareLink();
 
   // Transitions stay off until the restored state has painted (see styles.css)
   requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -1021,7 +1315,7 @@
   const isBuilt = !!document.querySelector('script[src*="script."][src$=".js"]:not([src="script.js"])');
   if ('serviceWorker' in navigator && location.protocol !== 'file:' && isBuilt) {
     addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => { /* caching is optional */ });
+      navigator.serviceWorker.register(scriptURL(SW_SRC)).catch(() => { /* caching is optional */ });
     }, { once: true });
   }
 })();

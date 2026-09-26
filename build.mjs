@@ -1,5 +1,5 @@
 // Builds the site into dist/ for GitHub Pages.
-//   - Minifies script.js and styles.css with esbuild
+//   - Minifies script.js, boot.js and styles.css with esbuild
 //   - Gives them content-hashed names (script.3f9a1c2b7d.js) so browsers never use a stale copy
 //   - Rewrites index.html to point at the hashed files
 //   - Writes sw.js with this build's version and file list
@@ -40,7 +40,16 @@ const css = (await transform(await readFile('styles.css', 'utf8'), {
   legalComments: 'none',
 })).code;
 
+// boot.js runs in <head> before first paint; a separate file so the CSP can ban inline scripts
+const boot = (await transform(await readFile('boot.js', 'utf8'), {
+  loader: 'js',
+  minify: true,
+  legalComments: 'none',
+})).code;
+
 const jsName = `script.${hash(js)}.js`;
+const bootName = `boot.${hash(boot)}.js`;
+await writeFile(`${OUT}/${bootName}`, boot);
 const cssName = `styles.${hash(css)}.css`;
 await writeFile(`${OUT}/${jsName}`, js);
 await writeFile(`${OUT}/${cssName}`, css);
@@ -49,20 +58,21 @@ await writeFile(`${OUT}/${cssName}`, css);
 let html = await readFile('index.html', 'utf8');
 html = replaceOnce(html, 'href="styles.css"', `href="${cssName}"`, 'index.html');
 html = replaceOnce(html, 'src="script.js"', `src="${jsName}"`, 'index.html');
+html = replaceOnce(html, 'src="boot.js"', `src="${bootName}"`, 'index.html');
 html = html.replace(/\n[ \t]+/g, '\n');
 await writeFile(`${OUT}/index.html`, html);
 
 // Service worker: stamped with a build version so each deploy gets a fresh cache
-const precache = ['./', cssName, jsName, 'fonts/schibsted-grotesk.woff2'];
+const precache = ['./', cssName, bootName, jsName, 'fonts/schibsted-grotesk.woff2'];
 let sw = await readFile('sw.js', 'utf8');
-sw = replaceOnce(sw, "'__VERSION__'", JSON.stringify(hash(html + js + css)), 'sw.js');
+sw = replaceOnce(sw, "'__VERSION__'", JSON.stringify(hash(html + boot + js + css)), 'sw.js');
 sw = replaceOnce(sw, '[/* __PRECACHE__ */]', JSON.stringify(precache), 'sw.js');
 sw = (await transform(sw, { loader: 'js', minify: true, legalComments: 'none' })).code;
 await writeFile(`${OUT}/sw.js`, sw);
 
 // Size report
 const kb = n => `${(n / 1024).toFixed(1)} KB`;
-for (const [src, out] of [['script.js', jsName], ['styles.css', cssName], ['index.html', 'index.html']]) {
+for (const [src, out] of [['script.js', jsName], ['boot.js', bootName], ['styles.css', cssName], ['index.html', 'index.html']]) {
   const before = (await stat(src)).size;
   const after = (await stat(`${OUT}/${out}`)).size;
   console.log(`${src.padEnd(11)} ${kb(before).padStart(8)} -> ${kb(after).padStart(8)}  ${out}`);

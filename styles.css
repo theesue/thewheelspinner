@@ -534,8 +534,15 @@
   .foot {
     display: grid;
     gap: 18px;
-    padding: 18px calc(22px + env(safe-area-inset-right, 0px)) calc(22px + env(safe-area-inset-bottom, 0px)) 22px;
+    padding: 18px calc(22px + env(safe-area-inset-right, 0px)) 14px 22px;
     border-block-start: 1px solid var(--faint);
+  }
+
+  /* Share / export + GitHub link: last thing in the panel, so it owns the bottom inset */
+  .foot-end {
+    display: grid;
+    gap: 14px;
+    padding: 0 calc(22px + env(safe-area-inset-right, 0px)) calc(22px + env(safe-area-inset-bottom, 0px)) 22px;
   }
 
   /* Settings (animated open/close where ::details-content is supported) */
@@ -703,7 +710,7 @@
     &:checked::after { translate: 18px 0; }
   }
 
-  .tools { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tools, .share-tools { display: flex; flex-wrap: wrap; gap: 6px; }
 
   .tool {
     display: inline-flex;
@@ -754,7 +761,7 @@
   }
 
   /* Mid-spin: everything below the heading is dimmed and disabled */
-  .side.spinning :is(.list-wrap, .foot) { opacity: .5; }
+  .side.spinning :is(.list-wrap, .foot, .foot-end) { opacity: .5; }
 
   /* Disabled item names stay readable (browsers fade disabled text by default) */
   .row input[type="text"]:disabled { color: inherit; -webkit-text-fill-color: currentColor; opacity: 1; }
@@ -801,7 +808,40 @@
 
     &::backdrop { background: rgb(10 11 14 / .45); }
   }
-  .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-block-start: 20px; }
+  .confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-block-start: 20px; }
+
+  /* Share dialog: the link itself, selectable and readable */
+  .share-dialog, .open-dialog { inline-size: min(440px, calc(100vw - 32px)); }
+  .share-link {
+    display: block;
+    inline-size: 100%;
+    margin-block-start: 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--faint);
+    border-radius: 10px;
+    background: var(--hover);
+    color: var(--ink);
+    font-size: 16px; /* no iOS zoom */
+    text-overflow: ellipsis;
+    &:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  }
+
+  /* Open dialog: a peek at what's in the link before anything changes */
+  .open-preview {
+    display: grid;
+    gap: 6px;
+    margin-block-start: 14px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--hover);
+    max-block-size: 220px;
+    overflow-y: auto;
+
+    li { display: flex; align-items: center; gap: 10px; min-inline-size: 0; }
+    .dot { inline-size: 12px; block-size: 12px; border-radius: 50%; flex: none; }
+    .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .more { color: var(--soft); font-size: 14px; }
+  }
 
   /* PIN entry: one field, big dots, with a show/hide button on the right */
   .pin-field { position: relative; margin-block-start: 16px; }

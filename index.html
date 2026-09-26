@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
+<!-- Content Security Policy: only this site's own files may load or run. No inline
+     scripts, no eval, no plugins, no <base> tricks, no form posts anywhere, and
+     (in Chromium) Trusted Types blocks any string-to-HTML sinks outright. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'; trusted-types wheel">
+<meta name="referrer" content="no-referrer">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eceef2">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#121316">
 <title>Spin the Wheel</title>
@@ -12,25 +17,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preload" href="fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
-<script>
-  // Before anything else loads: pick the view (wheel or slot reel) so the right one
-  // shows on first paint, and paint the saved wheel colors so a refresh never shows
-  // an empty wheel while script.js starts up. script.js draws the real thing on top.
-  (function () {
-    try {
-      var saved = JSON.parse(localStorage.getItem('spinwheel:v1') || 'null');
-      var items = (saved && saved.items || []).filter(function (x) { return /^#[0-9a-f]{6}$/i.test(x && x.color); });
-      var st = saved && saved.settings || {};
-      var slotAt = +st.slotAt || 100;
-      var view = st.view === 'wheel' || st.view === 'slot' ? st.view : (items.length > slotAt ? 'slot' : 'wheel');
-      document.documentElement.dataset.view = view;
-      if (view === 'slot' || !items.length) return;
-      var a = 360 / items.length, stops = [];
-      for (var i = 0; i < items.length; i++) stops.push(items[i].color + ' ' + i * a + 'deg ' + (i + 1) * a + 'deg');
-      document.documentElement.style.setProperty('--wheel-bg', 'conic-gradient(from ' + -a / 2 + 'deg, ' + stops.join(', ') + ')');
-    } catch (e) {}
-  })();
-</script>
+<script src="boot.js"></script>
 </head>
 <body>
 <div class="app">
@@ -151,13 +138,28 @@
           <button class="tool danger" type="button" id="clearAll">Clear all</button>
           <input type="file" id="csvFile" accept=".csv,.txt,text/csv,text/plain" hidden>
         </div>
-
-        <a class="repo-link" id="repoLink" href="https://github.com/theesue/thewheelspinner" target="_blank" rel="noopener">
-          View source on GitHub
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5h5v5M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </a>
       </div>
     </fieldset>
+
+    <!-- Outside the fieldset on purpose: sharing and exporting only read the list,
+         so they keep working while the wheel is locked -->
+    <div class="foot-end">
+      <div class="share-tools">
+        <button class="tool" type="button" id="shareBtn">
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M6 8a2.6 2.6 0 0 0 3.7 0l2-2a2.6 2.6 0 0 0-3.7-3.7l-.6.6M8 6a2.6 2.6 0 0 0-3.7 0l-2 2a2.6 2.6 0 0 0 3.7 3.7l.6-.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Share link
+        </button>
+        <button class="tool" type="button" id="exportBtn">
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 9V1.5M4 4.5l3-3 3 3M2 11.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Export CSV
+        </button>
+      </div>
+
+      <a class="repo-link" id="repoLink" href="https://github.com/theesue/thewheelspinner" target="_blank" rel="noopener noreferrer">
+        View source on GitHub
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5h5v5M9.5 2.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    </div>
     <div class="drop-hint" aria-hidden="true">Drop a CSV to add its items</div>
   </aside>
 </div>
@@ -169,6 +171,36 @@
     <div class="confirm-actions">
       <button class="tool" value="cancel" autofocus>Cancel</button>
       <button class="tool solid-danger" value="clear">Clear all</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Share: shows the link so it can be checked, copied or sent -->
+<dialog class="confirm share-dialog" id="shareDialog" closedby="any">
+  <form method="dialog">
+    <h2>Share this wheel</h2>
+    <p id="shareText"></p>
+    <input class="share-link" id="shareLink" type="text" readonly aria-label="Share link"
+           autocomplete="off" spellcheck="false">
+    <div class="confirm-actions">
+      <button class="tool" value="close">Close</button>
+      <button class="tool" type="button" id="shareNative" hidden>Share…</button>
+      <button class="tool solid" type="button" id="shareCopy">Copy link</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Opening someone's link: nothing changes until the person picks what to do -->
+<dialog class="confirm open-dialog" id="openDialog">
+  <form method="dialog">
+    <h2>Open a shared wheel?</h2>
+    <p id="openText"></p>
+    <ul class="open-preview" id="openPreview"></ul>
+    <div class="confirm-actions">
+      <button class="tool" value="cancel">Cancel</button>
+      <button class="tool" value="add" id="openAdd">Add to my list</button>
+      <button class="tool solid" value="replace" id="openReplace">Replace my list</button>
+      <button class="tool solid" type="button" id="openUnlock" hidden>Unlock</button>
     </div>
   </form>
 </dialog>

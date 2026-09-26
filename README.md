@@ -7,7 +7,8 @@ A simple spin-the-wheel you can use to pick names, decide where to eat, choose w
 - Add items by typing in the list and pressing Enter. Click an item to rename it, or click its colored dot to change the color.
 - Spin by clicking the wheel or the Spin button in the middle. Clicking again while it's still spinning speeds it up instead of starting over.
 - When it stops, the picked item shows up at the top and the rest of the wheel fades out so it's easy to see.
-- Import a list from a CSV file with the Import CSV button, or just drag the file onto the item list.
+- Import a list from a CSV file with the Import CSV button, or just drag the file onto the item list. Export CSV saves your list back out in the same format.
+- Share link makes a link with your list in it (up to 200 items). Whoever opens it gets asked whether to load it, add it to their own list, or cancel, so nobody's list gets replaced by surprise. The list lives inside the link itself, so there's no server storing anything.
 - Your items and settings are saved in your browser, so they'll still be there next time you open the page.
 - Lock the wheel with a 4-digit PIN using the padlock next to Items. While it's locked, anyone can still spin, but nobody can add, remove, edit or recolor items, change settings, or import a file until the PIN is entered. The PIN itself is never saved, only a salted hash of it. Just keep in mind a 4-digit PIN on a web page is there to stop casual tampering, not a determined person with dev tools.
 
@@ -53,6 +54,16 @@ Sam,#0af
 ```
 
 Items without a color get one picked for them. Imported items are added to whatever's already on the wheel, up to 1,000 per file. If a file has more than 100 lines you'll get a heads-up, since the labels get pretty small at that point.
+
+## Security
+
+Share links come from other people, so the page treats them as untrusted:
+
+- A link can only ever turn into a list of plain-text names and hex colors. Nothing in it gets run, used as a web address, or inserted into the page as HTML, so there's no way to use one for a redirect or to inject a script.
+- Links are checked hard before anything loads: a size limit on the link, a limit on how big it can get when decompressed, an exact expected shape, and at most 200 items. Anything off gets rejected with a message and your list isn't touched.
+- Every name, whether typed, imported, loaded from a link or from saved data, goes through the same cleanup. Control characters and invisible characters (including the ones that can make text display backwards) are removed and names are capped at 60 characters.
+- Exported CSVs are safe to open in Excel or Sheets. Names that start with `=`, `+`, `-` or `@` get a leading `'` so they show up as text instead of running as formulas, and the importer takes it back off.
+- The page has a strict Content Security Policy, so the browser itself refuses to run any script that isn't one of the site's own files, and blocks HTML injection outright in Chromium browsers.
 
 ## Working on it
 
